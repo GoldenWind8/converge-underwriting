@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Underwriting playbook{% endblock %}
+
+{% block wrap_class %}narrow{% endblock %}
+
+{% block css %}
+<style>
+  pre { white-space: pre-wrap; font-family: ui-monospace, Menlo, monospace; font-size: .82rem;
+        background: #f9fafb; border: 1px solid var(--line); border-radius: 8px; padding: 1.1rem 1.25rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+  <h1>Underwriting playbook</h1>
+  <p class="sub">Lessons distilled from human reviews. The playbook is a plain-text document an
+    underwriter can open, audit, and edit directly — every revision is archived automatically.</p>
+
+  <div class="card">
+    <pre>{{ playbook }}</pre>
+  </div>
+
+  <p class="pagenav"><a href="/">← New assessment</a> · <a href="/cases">Case memory</a></p>
+{% endblock %}

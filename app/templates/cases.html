@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Case memory{% endblock %}
+
+{% block content %}
+  <h1>Case memory <span class="pill">{{ cases|length }} approved case(s)</span></h1>
+  <p class="sub">Every approved assessment becomes a precedent that informs the next one.</p>
+
+  <div class="card">
+    {% if cases %}
+    <table>
+      <tr><th>Case</th><th>Client</th><th>Summary</th><th>Band</th><th>Source</th><th>Approved</th></tr>
+      {% for c in cases %}
+      <tr>
+        <td><a href="/cases/{{ c.case_id }}">{{ c.case_id }}</a></td>
+        <td>{{ c.client_profile.business_name or "—" }}</td>
+        <td>{{ c.summary or c.client_profile.summary }}</td>
+        <td><span class="band {{ c.final_band }}">{{ c.final_band }}</span></td>
+        <td><span class="pill">{{ c.source }}</span></td>
+        <td>{{ c.created_at[:16].replace("T", " ") }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="none">No cases yet — approve an assessment to seed the system's memory.</p>
+    {% endif %}
+  </div>
+
+  <p class="pagenav"><a href="/">← New assessment</a> · <a href="/playbook">Playbook</a></p>
+{% endblock %}

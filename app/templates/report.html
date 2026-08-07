@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Underwriting Report — {{ case.client_profile.business_name or "Applicant" }}{% endblock %}
+
+{% block css %}
+<style>
+  header.doc { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+               border-bottom: 3px solid var(--accent); padding-bottom: 1.1rem; margin-bottom: 1.4rem; }
+  .doc-kicker { font-size: .7rem; font-weight: 600; text-transform: uppercase;
+                letter-spacing: .12em; color: var(--muted); margin-bottom: .3rem; }
+  .doc h1 { font-size: 1.55rem; }
+  .meta { color: var(--muted); font-size: .8rem; text-align: right; }
+  .scorecard { display: flex; gap: 1.25rem; align-items: center; margin: .6rem 0 1rem; }
+  .band.big { font-size: .95rem; padding: .45rem 1.1rem; }
+  .score-num { font-size: 2.2rem; font-weight: 700; color: var(--navy); }
+  .sev { font-weight: 600; white-space: nowrap; }
+  .sev.high { color: var(--high); } .sev.medium { color: var(--elevated); }
+  .sev.low { color: var(--moderate); } .sev.info { color: var(--muted); }
+  ul.refer { margin: .4rem 0; padding-left: 1.2rem; } ul.refer li { margin-bottom: .35rem; }
+  .learn { background: #fdf6ea; border: 1px solid #f2ddb4; border-left: 4px solid var(--accent);
+           border-radius: 8px; padding: .8rem 1rem; font-size: .88rem; margin-top: 1.4rem; }
+  .foot { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line);
+          color: var(--muted); font-size: .78rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="card">
+    <header class="doc">
+      <div>
+        <div class="doc-kicker">Underwriting report</div>
+        <h1>{{ case.client_profile.business_name or "Unnamed applicant" }}</h1>
+        <div style="margin-top:.35rem;">
+          <span class="pill">{{ case.client_profile.industry or "industry unknown" }}</span>
+          <span class="pill">case {{ case.case_id }}</span>
+        </div>
+      </div>
+      <div class="meta">
+        Generated {{ generated_at }}<br/>
+        Human approved ✓
+      </div>
+    </header>
+
+    <div class="scorecard">
+      <span class="band big {{ case.final_band }}">{{ case.final_band }} risk</span>
+      <div>
+        <span class="score-num">{{ case.final_score }}</span>
+        <span class="muted">risk points · {{ case.approved_findings|length }} approved factor(s)</span>
+      </div>
+    </div>
+
+    <h2>Client</h2>
+    <table>
+      <tr><th style="width:30%">Industry / trade</th><td>{{ case.client_profile.industry or "—" }}</td></tr>
+      <tr><th>Employees</th><td>{{ case.client_profile.employees if case.client_profile.employees is not none else "—" }}</td></tr>
+      <tr><th>Cover requested</th><td>{{ case.client_profile.covers_requested|join(", ") or "—" }}</td></tr>
+      <tr><th>Summary</th><td>{{ case.summary or case.client_profile.summary or "—" }}</td></tr>
+    </table>
+
+    <h2>Approved risk factors</h2>
+    {% if case.approved_findings %}
+    <table>
+      <tr><th>Factor &amp; evidence</th><th style="width:12%">Severity</th><th style="width:9%">Points</th><th style="width:19%">Audit trail</th></tr>
+      {% for f in case.approved_findings %}
+      <tr>
+        <td>
+          <strong>{{ f.section }}</strong> · <span class="code">{{ f.factor_name }}</span><br/>
+          {{ f.reasoning }}
+          {% if f.evidence_quote %}<br/><span class="quote">“{{ f.evidence_quote }}”</span>{% endif %}
+        </td>
+        <td class="sev {{ f.severity.value }}">{{ f.severity.value }}</td>
+        <td>{{ f.suggested_points }}</td>
+        <td class="code">
+          {% if f.precedent_case_ids %}Precedents: {{ f.precedent_case_ids|join(", ") }}<br/>{% endif %}
+          {% if f.playbook_rule_ids %}Rules: {{ f.playbook_rule_ids|join(", ") }}<br/>{% endif %}
+          {% if not f.precedent_case_ids and not f.playbook_rule_ids %}New — no precedent{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="none">No risk factors approved.</p>
+    {% endif %}
+
+    {% if case.corrections %}
+    <h2>Reviewer corrections (draft → approved)</h2>
+    <ul class="refer">
+      {% for c in case.corrections %}
+      <li><span class="code">{{ c.type }}</span> — {{ c.factor_name }}{% if c.detail %} ({{ c.detail }}){% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if learning_note %}
+    <div class="learn"><strong>What the system learned from this review:</strong> {{ learning_note }}
+      <a href="/playbook" class="noprint">view playbook</a></div>
+    {% endif %}
+
+    <div class="foot">
+      Every finding above carries a verbatim evidence quote, its precedent cases and playbook rules,
+      and a human sign-off. Scores are capped and banded deterministically — the AI proposes, it never
+      does the arithmetic.
+      {% if engine != "stored" %}Draft proposed by {{ engine }}, reviewed and approved by a human underwriter.{% else %}Rendered from the stored case record, originally reviewed and approved by a human underwriter.{% endif %}
+      This case is now part of the system's memory and will inform future assessments.
+    </div>
+  </div>
+
+  <p class="pagenav noprint">
+    <a href="/">← New assessment</a> · <a href="/cases">Case memory</a> · <a href="/playbook">Playbook</a>
+  </p>
+{% endblock %}

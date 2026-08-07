@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Review draft — {{ draft.client_profile.business_name or "Applicant" }}{% endblock %}
+
+{% block css %}
+<style>
+  header.doc { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+               border-bottom: 3px solid var(--accent); padding-bottom: 1.1rem; margin-bottom: 1.4rem; }
+  .meta { color: var(--muted); font-size: .8rem; text-align: right; }
+  .sev-select { min-width: 6rem; }
+  input[type=number] { width: 4.4rem; }
+  ul.refer { margin: .4rem 0; padding-left: 1.2rem; } ul.refer li { margin-bottom: .3rem; }
+  .dropped { color: var(--high); font-size: .84rem; }
+  .addrow td { background: #f9fafb; }
+  .approve-row { display: flex; align-items: center; gap: 1rem; margin-top: 1.75rem; flex-wrap: wrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="card">
+    <header class="doc">
+      <div>
+        <h1>Draft risk assessment — review &amp; approve</h1>
+        <div style="margin-top:.35rem; font-size:1rem;">{{ draft.client_profile.business_name or "Unnamed applicant" }}
+          <span class="pill">{{ draft.client_profile.industry or "industry unknown" }}</span></div>
+      </div>
+      <div class="meta">Generated {{ generated_at }}<br/>Drafted by <span class="pill">{{ engine }}</span></div>
+    </header>
+
+    <p>
+      <span class="band {{ result.band }}">{{ result.band }} (draft)</span>
+      &nbsp; <strong>{{ result.score }}</strong> <span class="hint">points across {{ result.findings|length }} finding(s) — recalculated deterministically after your edits.</span>
+    </p>
+
+    <form action="/approve" method="post">
+      <input type="hidden" name="draft_id" value="{{ draft_id }}" />
+
+      <h2>Proposed risk findings</h2>
+      {% if result.findings %}
+      <table>
+        <tr><th style="width:4%">Keep</th><th>Finding &amp; evidence</th><th style="width:13%">Severity</th>
+            <th style="width:9%">Points</th><th style="width:17%">Informed by</th></tr>
+        {% for f in result.findings %}
+        <tr>
+          <td><input type="checkbox" name="keep_{{ loop.index0 }}" checked /></td>
+          <td>
+            <strong>{{ f.section }}</strong> · <span class="code">{{ f.factor_name }}</span><br/>
+            {{ f.reasoning }}<br/>
+            {% if f.evidence_quote %}<span class="quote">“{{ f.evidence_quote }}”</span>{% endif %}
+          </td>
+          <td>
+            <select class="sev-select" name="severity_{{ loop.index0 }}">
+              {% for s in ["info","low","medium","high"] %}
+              <option value="{{ s }}" {% if f.severity.value == s %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td><input type="number" name="points_{{ loop.index0 }}" value="{{ f.suggested_points }}" min="0" max="20" /></td>
+          <td class="code">
+            {% if f.precedent_case_ids %}Precedents: {{ f.precedent_case_ids|join(", ") }}<br/>{% endif %}
+            {% if f.playbook_rule_ids %}Rules: {{ f.playbook_rule_ids|join(", ") }}<br/>{% endif %}
+            {% if not f.precedent_case_ids and not f.playbook_rule_ids %}New — no precedent<br/>{% endif %}
+            Confidence {{ (f.confidence * 100)|round|int }}%
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+      <p class="hint">Confidence is the model's self-assessed certainty; findings under 60% are automatically flagged for referral.</p>
+      {% else %}
+      <p class="none">No findings proposed.</p>
+      {% endif %}
+
+      <h2>Add a finding the system missed</h2>
+      <table>
+        <tr class="addrow">
+          <td><input type="text" name="new_factor_name" placeholder="factor_name (snake_case)" style="width:100%" /></td>
+          <td style="width:18%"><input type="text" name="new_section" placeholder="Section" style="width:100%" /></td>
+          <td style="width:13%">
+            <select class="sev-select" name="new_severity">
+              {% for s in ["info","low","medium","high"] %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+            </select>
+          </td>
+          <td style="width:9%"><input type="number" name="new_points" value="0" min="0" max="20" /></td>
+        </tr>
+        <tr class="addrow"><td colspan="4"><input type="text" name="new_reasoning" placeholder="Why is this a risk? (leave factor name blank to skip)" style="width:100%" /></td></tr>
+      </table>
+
+      {% if result.dropped %}
+      <h2>Dropped by guardrails</h2>
+      <ul class="refer">
+        {% for f, reason in result.dropped %}
+        <li class="dropped"><span class="code">{{ f.factor_name }}</span> — {{ reason }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      <h2>Referrals</h2>
+      {% if result.referrals %}
+      <ul class="refer">{% for r in result.referrals %}<li>{{ r }}</li>{% endfor %}</ul>
+      {% else %}<p class="none">None.</p>{% endif %}
+
+      {% if draft.overall_notes %}
+      <h2>Assessor notes</h2>
+      <ul class="refer">{% for n in draft.overall_notes %}<li>{{ n }}</li>{% endfor %}</ul>
+      {% endif %}
+
+      <div class="approve-row">
+        <button type="submit">Approve — store case &amp; update playbook</button>
+        <span class="hint">Approval is the learning signal: only approved cases enter memory.</span>
+      </div>
+    </form>
+  </div>
+
+  <p class="pagenav"><a href="/">← New assessment</a> · <a href="/cases">Case memory</a> · <a href="/playbook">Playbook</a></p>
+{% endblock %}

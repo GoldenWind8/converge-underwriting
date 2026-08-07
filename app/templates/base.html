@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Self-Learning Underwriting — POC{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --navy:#1c2b39; --ink:#24313e; --muted:#5e6e7e; --line:#dee3eb;
+      --bg:#f4f6f8; --card:#ffffff; --accent:#f36f21; --accent-dark:#d95b12;
+      --low:#2e7d5b; --moderate:#c2830f; --elevated:#e05e10; --high:#b3261e;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { font-family: 'Montserrat', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+           font-size: 15px; line-height: 1.55; color: var(--ink); background: var(--bg); margin: 0; }
+
+    nav { background: var(--navy); }
+    nav .inner { max-width: 960px; margin: 0 auto; padding: .85rem 1rem;
+                 display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .brand { color: #fff; font-weight: 600; font-size: .95rem; text-decoration: none;
+             display: inline-flex; align-items: center; letter-spacing: .01em; }
+    .brand::before { content: ""; width: 9px; height: 9px; background: var(--accent);
+                     border-radius: 2px; margin-right: .55rem; }
+    .brand .tag { font-size: .62rem; font-weight: 600; letter-spacing: .08em; color: rgba(255,255,255,.65);
+                  border: 1px solid rgba(255,255,255,.3); border-radius: 999px; padding: .08rem .5rem; margin-left: .6rem; }
+    nav .links a { color: rgba(255,255,255,.78); text-decoration: none; font-size: .82rem;
+                   font-weight: 500; margin-left: 1.4rem; padding-bottom: .15rem; border-bottom: 2px solid transparent; }
+    nav .links a:hover { color: #fff; border-bottom-color: var(--accent); }
+
+    .wrap { max-width: 960px; margin: 0 auto; padding: 2.25rem 1rem 3rem; }
+    .wrap.narrow { max-width: 760px; }
+
+    h1 { font-size: 1.45rem; font-weight: 600; color: var(--navy); margin: 0 0 .3rem; letter-spacing: -.01em; }
+    h2 { font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .09em;
+         color: var(--navy); border-bottom: 1px solid var(--line); padding-bottom: .35rem; margin: 1.9rem 0 .7rem; }
+    .sub { color: var(--muted); margin: 0 0 1.6rem; font-size: .92rem; }
+    a { color: var(--accent-dark); }
+
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            padding: 1.75rem 2rem; box-shadow: 0 1px 3px rgba(28,43,57,.06); }
+
+    table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+    td, th { text-align: left; padding: .55rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+    tbody tr:hover, tr.hoverable:hover { background: #fafbfc; }
+
+    label { display: block; font-weight: 600; font-size: .88rem; margin: 0 0 .45rem; color: var(--navy); }
+    textarea, select, input[type=text], input[type=number] {
+      font-family: inherit; font-size: .86rem; color: var(--ink);
+      border: 1px solid var(--line); border-radius: 8px; padding: .45rem .6rem; background: #fff; }
+    textarea:focus, select:focus, input:focus { outline: 2px solid rgba(243,111,33,.35); border-color: var(--accent); }
+    input[type=file] { font-size: .82rem; font-family: inherit; }
+
+    button, .btn { background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+             padding: .72rem 1.5rem; font-size: .92rem; font-weight: 600; font-family: inherit;
+             cursor: pointer; transition: background .15s, box-shadow .15s, transform .15s; }
+    button:hover, .btn:hover { background: var(--accent-dark); box-shadow: 0 3px 10px rgba(243,111,33,.3); transform: translateY(-1px); }
+    button.ghost { background: transparent; color: var(--accent-dark); border: 1px solid var(--accent); }
+    button.ghost:hover { background: rgba(243,111,33,.08); box-shadow: none; }
+
+    .band { display: inline-block; color: #fff; font-weight: 600; border-radius: 999px;
+            padding: .28rem .85rem; font-size: .82rem; }
+    .band.Low { background: var(--low); } .band.Moderate { background: var(--moderate); }
+    .band.Elevated { background: var(--elevated); } .band.High { background: var(--high); }
+
+    .pill { font-size: .7rem; font-weight: 500; background: #eef1f5; border-radius: 999px;
+            padding: .12rem .6rem; color: var(--muted); white-space: nowrap; }
+    .quote { font-family: ui-monospace, Menlo, monospace; font-size: .74rem; background: #f5f7f9;
+             border: 1px solid var(--line); padding: .2rem .45rem; border-radius: 5px;
+             display: inline-block; margin-top: .3rem; }
+    .code { font-family: ui-monospace, Menlo, monospace; font-size: .74rem; color: var(--muted); }
+    .muted { color: var(--muted); }
+    .none { color: var(--muted); font-style: italic; }
+    .hint { color: var(--muted); font-size: .82rem; }
+
+    .pagenav { margin-top: 1.5rem; font-size: .85rem; }
+    .pagenav a { text-decoration: none; font-weight: 500; }
+    .pagenav a:hover { text-decoration: underline; }
+
+    footer { text-align: center; color: var(--muted); font-size: .74rem; padding: 0 1rem 2rem; }
+
+    @media print {
+      body { background: #fff; font-size: 13px; }
+      nav, footer, .noprint { display: none; }
+      .wrap { padding: 0; max-width: none; }
+      .card { border: 0; box-shadow: none; padding: 0; }
+    }
+  </style>
+  {% block css %}{% endblock %}
+</head>
+<body>
+  <nav>
+    <div class="inner">
+      <a class="brand" href="/">Self-Learning Underwriting <span class="tag">POC</span></a>
+      <div class="links">
+        <a href="/">New assessment</a><a href="/cases">Case memory</a><a href="/playbook">Playbook</a>
+      </div>
+    </div>
+  </nav>
+  <main class="wrap {% block wrap_class %}{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+  <footer>AI-assisted drafting — every assessment is reviewed and approved by a human underwriter.</footer>
+</body>
+</html>

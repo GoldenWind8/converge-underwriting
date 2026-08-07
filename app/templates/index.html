@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block wrap_class %}narrow{% endblock %}
+
+{% block css %}
+<style>
+  textarea { width: 100%; min-height: 260px; font-family: ui-monospace, Menlo, monospace;
+             font-size: .84rem; padding: .8rem; resize: vertical; }
+  .row { display: flex; gap: 1rem; align-items: flex-end; justify-content: space-between;
+         margin-top: 1.1rem; flex-wrap: wrap; }
+  .actions { display: flex; gap: .6rem; flex-wrap: wrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+  <h1>Self-Learning Underwriting</h1>
+  <p class="sub">Assess → human review → the system learns. Every correction improves the next assessment.</p>
+
+  <form class="card" action="/assess" method="post" enctype="multipart/form-data">
+    <label for="raw_text">Paste the raw application or broker notes</label>
+    <textarea id="raw_text" name="raw_text"
+              placeholder="Any free-form text works — a filled-in form, an email, broker notes…"></textarea>
+
+    <div class="row">
+      <div>
+        <label for="file" style="margin-bottom:.3rem;">…or upload a file</label>
+        <input id="file" type="file" name="file" accept=".txt,.md,.csv" />
+      </div>
+      <div class="actions">
+        {% if sample %}
+        <button type="button" class="ghost" onclick="loadSample()">Load sample application</button>
+        {% endif %}
+        <button type="submit">Draft risk assessment</button>
+      </div>
+    </div>
+  </form>
+
+  {% if sample %}
+  <template id="sample-text">{{ sample }}</template>
+  <script>
+    function loadSample() {
+      document.getElementById("raw_text").value =
+        document.getElementById("sample-text").content.textContent.trim();
+    }
+  </script>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secrets — never commit API keys
+.env
+*.env
+
+# Generated artifacts
+sample_data/sample_report.html
+
+# IDE / OS
+.idea/
+.DS_Store
+
+# Runtime data (case memory, playbook) — regenerate with `python -m app.ingest_chats`
+data/
+.pytest_cache/
