@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Review {{ draft.client_profile.business_name or "assessment" }} — Aegis{% endblock %}
+{% block title %}Review {{ draft.client_profile.business_name or "assessment" }} — Converge Underwriting{% endblock %}
 {% block wrap_class %}wide{% endblock %}
 {% block css %}
 <style>
@@ -18,7 +18,7 @@
   .source-doc mark { padding:2px 0; border-radius:2px; background:#ffe29a; box-shadow:0 0 0 2px #ffe29a; }
   .finding-stack { display:grid; gap:12px; }
   .finding-card { position:relative; overflow:hidden; border:1px solid var(--line); border-radius:12px; background:#fff; box-shadow:var(--shadow-sm); transition:.15s ease; }
-  .finding-card:hover,.finding-card.active { border-color:#8fbfc7; box-shadow:0 7px 24px rgba(10,50,66,.08); }
+  .finding-card:hover,.finding-card.active { border-color:#a9b5f9; box-shadow:0 7px 24px rgba(79,110,247,.09); }
   .finding-card.active::before { content:""; position:absolute; inset:0 auto 0 0; width:3px; background:var(--brand); }
   .finding-head { display:flex; align-items:flex-start; justify-content:space-between; gap:15px; padding:17px 18px 12px; }
   .finding-title { display:flex; align-items:flex-start; gap:11px; }
@@ -28,7 +28,7 @@
   .finding-controls label { margin-bottom:4px; font-size:9px; letter-spacing:.06em; text-transform:uppercase; }
   .finding-body { padding:0 18px 17px 47px; }
   .reasoning { margin-bottom:10px; color:#40596b; }
-  .evidence { display:flex; gap:9px; padding:10px 12px; border-left:3px solid #83bdc5; border-radius:0 8px 8px 0; background:#f0f8f9; color:#335761; font:11px/1.55 'IBM Plex Mono',monospace; cursor:pointer; }
+  .evidence { display:flex; gap:9px; padding:10px 12px; border-left:3px solid #899bf7; border-radius:0 8px 8px 0; background:#f2f3ff; color:#3d466f; font:11px/1.55 'IBM Plex Mono',monospace; cursor:pointer; }
   .audit-row { display:flex; align-items:center; gap:6px; margin-top:11px; flex-wrap:wrap; }
   .confidence { margin-left:auto; color:var(--muted); font-size:10px; }
   .section-head { display:flex; align-items:center; justify-content:space-between; margin:22px 0 10px; }
@@ -38,7 +38,7 @@
   .add-grid-wide { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:10px; }
   .evidence-picker { position:relative; }.evidence-picker button { position:absolute; right:6px; top:29px; padding:6px 9px; font-size:10px; }
   .referral-list { display:grid; gap:8px; }.referral { display:flex; gap:10px; padding:11px 13px; border:1px solid #ead9ad; border-radius:9px; background:var(--gold-soft); color:#72591f; font-size:12px; }
-  .approve-bar { position:sticky; bottom:12px; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:18px; padding:14px 16px; border:1px solid #a7cfd5; border-radius:12px; background:rgba(244,251,251,.94); box-shadow:0 12px 35px rgba(7,20,33,.16); backdrop-filter:blur(14px); }
+  .approve-bar { position:sticky; bottom:12px; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:18px; padding:14px 16px; border:1px solid #bcc5fb; border-radius:12px; background:rgba(247,247,255,.95); box-shadow:0 12px 35px rgba(15,17,32,.16); backdrop-filter:blur(14px); }
   .approve-bar strong { display:block; font-size:12px; }.approve-bar span { color:var(--muted); font-size:11px; }
   @media(max-width:1000px){.workspace{grid-template-columns:1fr}.source-panel{position:relative;top:auto;max-height:430px}.source-body{max-height:335px}.add-grid,.add-grid-wide{grid-template-columns:1fr 1fr}.stepper{display:none}}
   @media(max-width:620px){.review-top{align-items:flex-start;flex-direction:column}.finding-head{flex-direction:column}.finding-controls{width:100%;grid-template-columns:1fr 1fr}.finding-body{padding-left:18px}.add-grid,.add-grid-wide{grid-template-columns:1fr}.approve-bar{align-items:stretch;flex-direction:column}.approve-bar button{width:100%}}
@@ -113,7 +113,7 @@
       </section>
     </div>
   </form>
-  <div class="loading-overlay" id="approval-loading"><div class="loading-card"><div class="eyebrow" style="color:#64c5cb">Securing decision</div><h2 style="color:#fff;font-size:22px">Recording the approved case</h2><div class="loading-line"></div><p style="color:#a9bac6;margin:0">Preparing a governed learning proposal…</p></div></div>
+  <div class="loading-overlay" id="approval-loading"><div class="loading-card"><div class="eyebrow" style="color:#9aa8ff">Securing decision</div><h2 style="color:#fff;font-size:22px">Recording the approved case</h2><div class="loading-line"></div><p style="color:#a9acb9;margin:0">Preparing a governed learning proposal…</p></div></div>
 {% endblock %}
 {% block scripts %}
 <script>

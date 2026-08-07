@@ -62,6 +62,8 @@ def test_dashboard_and_playbook_render_enterprise_demo_elements():
     )
 
     assert "Recommended demo journey" in dashboard
+    assert "Converge Underwriting" in dashboard
+    assert '/static/converge-mark.svg' in dashboard
     assert "3</div><div class=\"metric-label\">Approved precedents" in dashboard
     assert 'id="PB-001"' in playbook
     assert "Gas certification" in playbook

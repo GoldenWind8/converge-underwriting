@@ -1,4 +1,4 @@
-# Solution Design — Self-Learning Risk Assessment
+# Solution Design — Converge Underwriting
 
 **Status:** Implemented — v1.3, 2026-08-07 (see [ARCHITECTURE.md](ARCHITECTURE.md) for the as-built map)
 **Supersedes:** the fixed-schema + deterministic-rules design described in the README —

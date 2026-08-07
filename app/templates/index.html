@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Aegis — Underwriting Intelligence{% endblock %}
+{% block title %}Converge Underwriting — Decision Intelligence{% endblock %}
 {% block css %}
 <style>
   .hero { display:grid; grid-template-columns:1.05fr .95fr; gap:34px; align-items:center; margin:18px 0 34px; }
@@ -11,7 +11,7 @@
   .trust svg { width:17px; color:var(--brand); }
   .metrics { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .metric { min-height:126px; padding:21px; border:1px solid var(--line); border-radius:14px; background:rgba(255,255,255,.75); }
-  .metric:first-child { grid-column:1/-1; background:linear-gradient(135deg,var(--navy-900),var(--navy-800)); color:#fff; border:0; }
+  .metric:first-child { grid-column:1/-1; background:linear-gradient(135deg,#16181f,#27203d); color:#fff; border:0; }
   .metric-value { font-size:31px; font-weight:700; letter-spacing:-.04em; }
   .metric-label { color:var(--muted); font-size:12px; }
   .metric:first-child .metric-label { color:#9db1c0; }
@@ -35,9 +35,9 @@
 {% block content %}
   <section class="hero">
     <div>
-      <div class="eyebrow">Human-led underwriting intelligence</div>
-      <h1>Every decision becomes <span>institutional knowledge.</span></h1>
-      <p class="hero-copy">Assess commercial risk against approved precedents, verify every finding against source evidence, and turn underwriter corrections into governed playbook updates.</p>
+      <div class="eyebrow">Converge Underwriting</div>
+      <h1>Underwriting intelligence that <span>compounds.</span></h1>
+      <p class="hero-copy">Enterprise-grade decision automation that converges source evidence, approved precedents, and human expertise into governed underwriting outcomes.</p>
       <div class="trust-row">
         <span class="trust"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg>Evidence verified</span>
         <span class="trust"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg>Human approved</span>
@@ -71,7 +71,7 @@
     </form>
   </section>
   {% if sample %}<template id="sample-text">{{ sample }}</template>{% endif %}
-  <div class="loading-overlay" id="loading"><div class="loading-card"><div class="eyebrow" style="color:#64c5cb">Assessment in progress</div><h2 style="color:#fff;font-size:22px">Building an evidence-linked risk view</h2><div class="loading-line"></div><p id="loading-stage" style="color:#a9bac6;margin:0">Extracting the client profile…</p></div></div>
+  <div class="loading-overlay" id="loading"><div class="loading-card"><div class="eyebrow" style="color:#9aa8ff">Assessment in progress</div><h2 style="color:#fff;font-size:22px">Building an evidence-linked risk view</h2><div class="loading-line"></div><p id="loading-stage" style="color:#a9acb9;margin:0">Extracting the client profile…</p></div></div>
 {% endblock %}
 {% block scripts %}
 <script>

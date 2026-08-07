@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Case Memory — Aegis{% endblock %}
+{% block title %}Case Memory — Converge Underwriting{% endblock %}
 {% block css %}<style>.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:22px}.search{max-width:330px;position:relative}.case-link{font-weight:700;text-decoration:none}.case-link:hover{text-decoration:underline}.summary{max-width:520px;color:#4e6475}.memory-table{overflow:auto}.source-tag{text-transform:capitalize}@media(max-width:700px){.page-head{align-items:stretch;flex-direction:column}.search{max-width:none}.hide-small{display:none}}</style>{% endblock %}
 {% block content %}
   <div class="page-head"><div><div class="eyebrow">Approved institutional memory</div><h1>Case memory</h1><p class="sub" style="margin:0">Every record is a human-approved decision available as future precedent.</p></div><div class="page-actions"><div class="search"><label for="case-search">Search memory</label><input id="case-search" type="search" placeholder="Client, industry, factor or case ID" /></div><form action="/demo/reset" method="post" onsubmit="return confirm('Reset all active POC cases and the current playbook? The previous playbook will remain archived.');"><button class="danger" type="submit">Reset POC</button></form></div></div>

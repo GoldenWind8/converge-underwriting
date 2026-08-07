@@ -1,4 +1,11 @@
-# Self-Learning Underwriting — POC
+<p align="center">
+  <img src="app/static/converge-underwriting-logo.svg" alt="Converge Underwriting" width="720" />
+</p>
+
+# Converge Underwriting — POC
+
+An enterprise underwriting-intelligence concept from [Converge AI](https://convergeai.co.za/),
+combining governed AI agents, workflow automation, and institutional knowledge.
 
 Takes a raw commercial-insurance application (form, email, broker notes), drafts a
 risk assessment, and **learns from every human review**: corrections update a plain

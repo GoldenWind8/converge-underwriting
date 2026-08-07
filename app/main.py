@@ -22,6 +22,7 @@ from typing import Optional
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import guardrails, llm, memory
 from .assess import assess
@@ -31,7 +32,8 @@ from .report import (render_cases, render_error, render_index, render_playbook,
 
 llm.require()  # no LLM configured -> fail here, at startup, with a clear message
 
-app = FastAPI(title="Self-Learning Underwriting POC")
+app = FastAPI(title="Converge Underwriting POC")
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 _SAMPLE_PATH = Path(__file__).parent.parent / "sample_data" / "sample_application.md"
 _SAMPLE = _SAMPLE_PATH.read_text(encoding="utf-8") if _SAMPLE_PATH.exists() else ""

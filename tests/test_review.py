@@ -62,3 +62,11 @@ def test_underwriter_accepts_learning_before_it_becomes_active():
     assert response.status_code == 200
     assert "PB-001" in memory.load_playbook()
     assert case.case_id not in PENDING_LEARNING
+
+
+def test_converge_brand_asset_is_served():
+    response = TestClient(app).get("/static/converge-underwriting-logo.svg")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/svg+xml")
+    assert b"Converge Underwriting" in response.content
