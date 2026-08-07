@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Aegis{% endblock %}
+{% block wrap_class %}narrow{% endblock %}
+{% block content %}
+  <div class="card card-pad" style="margin-top:45px;text-align:center;padding:54px">
+    <div style="width:48px;height:48px;margin:0 auto 18px;display:grid;place-items:center;border-radius:50%;background:#fbebeb;color:var(--high);font-size:20px">!</div>
+    <div class="eyebrow">Recoverable interruption</div><h1>{{ title }}</h1>
+    <p class="sub" style="margin:10px auto 25px">{{ message }}</p>
+    <a class="btn" href="{{ retry_href }}">Return and try again</a>
+  </div>
+{% endblock %}

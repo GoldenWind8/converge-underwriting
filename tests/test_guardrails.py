@@ -73,3 +73,19 @@ def test_score_is_sum_of_kept_findings():
                  evidence_quote="Hazardous materials: Yes (paint thinners on site)")
     result = apply(_draft(a, b), DOC)
     assert result.score == 15 + POINT_CAPS[Severity.high]
+
+
+def test_unverified_audit_citations_are_removed_and_referred():
+    draft = _draft(_finding(
+        precedent_case_ids=["C-9999"], playbook_rule_ids=["PB-999"]
+    ))
+    draft._retrieved_case_ids = {"C-0001"}
+    draft._available_rule_ids = {"PB-001"}
+
+    result = apply(draft, DOC)
+
+    assert result.findings[0].precedent_case_ids == []
+    assert result.findings[0].playbook_rule_ids == []
+    assert len(result.invalid_citations) == 2
+    assert any("Unverified audit" in referral for referral in result.referrals)
+    assert any("NOVEL" in referral for referral in result.referrals)

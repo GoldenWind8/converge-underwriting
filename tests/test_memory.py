@@ -69,3 +69,16 @@ def test_reflection_is_noop_when_playbook_unchanged(fake_llm):
     fake_llm.register(_PlaybookUpdate, _PlaybookUpdate(
         playbook_markdown=memory.load_playbook(), change_note="nothing to learn"))
     assert memory.reflect(_case()) is None
+
+
+def test_reflection_proposal_waits_for_human_approval(fake_llm):
+    original = memory.load_playbook()
+    updated = original + "\n## PB-001 · proposed lesson\nTreat as HIGH.\nSupporting cases: C-0001\n"
+    fake_llm.register(_PlaybookUpdate, _PlaybookUpdate(
+        playbook_markdown=updated, change_note="Proposed PB-001."))
+
+    proposal = memory.propose_reflection(_case())
+
+    assert proposal is not None
+    assert "PB-001" in proposal.proposed_playbook
+    assert memory.load_playbook() == original, "proposal must not silently change policy"

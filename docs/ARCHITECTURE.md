@@ -13,13 +13,17 @@ flowchart LR
     C --> D[review page<br/>human edits & approves]
     D --> E[report.py<br/>final report]
     D -->|approved case| M
-    D -->|corrections| R[reflect<br/>updates playbook.md]
-    R --> M
+    D -->|corrections| R[reflect<br/>proposes playbook diff]
+    R --> H{underwriter accepts<br/>or edits?}
+    H -->|approved| M
 ```
 
 Read it as: **the LLM proposes, guardrails verify, a human decides, memory remembers.**
 The arrow from the review page back into memory is the whole "self-learning" trick —
 the next assessment retrieves what this reviewer just approved.
+
+Learning is governed twice: approving the case activates it as a precedent, while a
+separate editable diff must be approved before any derived lesson changes the playbook.
 
 ## What guards what
 

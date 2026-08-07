@@ -1,115 +1,131 @@
 {% extends "base.html" %}
-
-{% block title %}Review draft — {{ draft.client_profile.business_name or "Applicant" }}{% endblock %}
-
+{% block title %}Review {{ draft.client_profile.business_name or "assessment" }} — Aegis{% endblock %}
+{% block wrap_class %}wide{% endblock %}
 {% block css %}
 <style>
-  header.doc { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
-               border-bottom: 3px solid var(--accent); padding-bottom: 1.1rem; margin-bottom: 1.4rem; }
-  .meta { color: var(--muted); font-size: .8rem; text-align: right; }
-  .sev-select { min-width: 6rem; }
-  input[type=number] { width: 4.4rem; }
-  ul.refer { margin: .4rem 0; padding-left: 1.2rem; } ul.refer li { margin-bottom: .3rem; }
-  .dropped { color: var(--high); font-size: .84rem; }
-  .addrow td { background: #f9fafb; }
-  .approve-row { display: flex; align-items: center; gap: 1rem; margin-top: 1.75rem; flex-wrap: wrap; }
+  .review-top { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:22px; }
+  .stepper { display:flex; gap:0; align-items:center; }
+  .step { display:flex; align-items:center; gap:7px; color:var(--muted-2); font-size:11px; font-weight:600; }
+  .step:not(:last-child)::after { content:""; width:34px; height:1px; margin:0 9px; background:var(--line); }
+  .step.done,.step.active { color:var(--brand-dark); }.step-num { display:grid; place-items:center; width:23px; height:23px; border:1px solid var(--line); border-radius:50%; }
+  .step.done .step-num,.step.active .step-num { color:#fff; border-color:var(--brand); background:var(--brand); }
+  .score-summary { display:flex; align-items:center; gap:12px; padding:10px 14px; background:#fff; border:1px solid var(--line); border-radius:11px; }
+  .score-value { font-size:24px; font-weight:700; line-height:1; letter-spacing:-.04em; }
+  .workspace { display:grid; grid-template-columns:minmax(330px,.82fr) minmax(560px,1.35fr); gap:18px; align-items:start; }
+  .source-panel { position:sticky; top:86px; max-height:calc(100vh - 108px); overflow:hidden; }
+  .source-body { max-height:calc(100vh - 198px); overflow:auto; padding:0; }
+  .source-doc { min-height:500px; margin:0; padding:24px; color:#334c5e; background:#fbfcfd; white-space:pre-wrap; word-break:break-word; font:12px/1.78 'IBM Plex Mono',monospace; user-select:text; }
+  .source-doc mark { padding:2px 0; border-radius:2px; background:#ffe29a; box-shadow:0 0 0 2px #ffe29a; }
+  .finding-stack { display:grid; gap:12px; }
+  .finding-card { position:relative; overflow:hidden; border:1px solid var(--line); border-radius:12px; background:#fff; box-shadow:var(--shadow-sm); transition:.15s ease; }
+  .finding-card:hover,.finding-card.active { border-color:#8fbfc7; box-shadow:0 7px 24px rgba(10,50,66,.08); }
+  .finding-card.active::before { content:""; position:absolute; inset:0 auto 0 0; width:3px; background:var(--brand); }
+  .finding-head { display:flex; align-items:flex-start; justify-content:space-between; gap:15px; padding:17px 18px 12px; }
+  .finding-title { display:flex; align-items:flex-start; gap:11px; }
+  .keep { margin-top:3px; accent-color:var(--brand); }
+  .factor { margin:0 0 3px; font-size:14px; }.factor .mono { color:var(--muted); font-weight:400; }
+  .finding-controls { display:grid; grid-template-columns:130px 84px; gap:8px; }
+  .finding-controls label { margin-bottom:4px; font-size:9px; letter-spacing:.06em; text-transform:uppercase; }
+  .finding-body { padding:0 18px 17px 47px; }
+  .reasoning { margin-bottom:10px; color:#40596b; }
+  .evidence { display:flex; gap:9px; padding:10px 12px; border-left:3px solid #83bdc5; border-radius:0 8px 8px 0; background:#f0f8f9; color:#335761; font:11px/1.55 'IBM Plex Mono',monospace; cursor:pointer; }
+  .audit-row { display:flex; align-items:center; gap:6px; margin-top:11px; flex-wrap:wrap; }
+  .confidence { margin-left:auto; color:var(--muted); font-size:10px; }
+  .section-head { display:flex; align-items:center; justify-content:space-between; margin:22px 0 10px; }
+  .section-head h2 { margin:0; }.section-head span { color:var(--muted); font-size:11px; }
+  .add-card { padding:19px; border:1px dashed #9db3c0; border-radius:12px; background:rgba(255,255,255,.66); }
+  .add-grid { display:grid; grid-template-columns:1.2fr .8fr .65fr .45fr; gap:9px; }
+  .add-grid-wide { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:10px; }
+  .evidence-picker { position:relative; }.evidence-picker button { position:absolute; right:6px; top:29px; padding:6px 9px; font-size:10px; }
+  .referral-list { display:grid; gap:8px; }.referral { display:flex; gap:10px; padding:11px 13px; border:1px solid #ead9ad; border-radius:9px; background:var(--gold-soft); color:#72591f; font-size:12px; }
+  .approve-bar { position:sticky; bottom:12px; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:18px; padding:14px 16px; border:1px solid #a7cfd5; border-radius:12px; background:rgba(244,251,251,.94); box-shadow:0 12px 35px rgba(7,20,33,.16); backdrop-filter:blur(14px); }
+  .approve-bar strong { display:block; font-size:12px; }.approve-bar span { color:var(--muted); font-size:11px; }
+  @media(max-width:1000px){.workspace{grid-template-columns:1fr}.source-panel{position:relative;top:auto;max-height:430px}.source-body{max-height:335px}.add-grid,.add-grid-wide{grid-template-columns:1fr 1fr}.stepper{display:none}}
+  @media(max-width:620px){.review-top{align-items:flex-start;flex-direction:column}.finding-head{flex-direction:column}.finding-controls{width:100%;grid-template-columns:1fr 1fr}.finding-body{padding-left:18px}.add-grid,.add-grid-wide{grid-template-columns:1fr}.approve-bar{align-items:stretch;flex-direction:column}.approve-bar button{width:100%}}
 </style>
 {% endblock %}
-
 {% block content %}
-  <div class="card">
-    <header class="doc">
-      <div>
-        <h1>Draft risk assessment — review &amp; approve</h1>
-        <div style="margin-top:.35rem; font-size:1rem;">{{ draft.client_profile.business_name or "Unnamed applicant" }}
-          <span class="pill">{{ draft.client_profile.industry or "industry unknown" }}</span></div>
-      </div>
-      <div class="meta">Generated {{ generated_at }}<br/>Drafted by <span class="pill">{{ engine }}</span></div>
-    </header>
-
-    <p>
-      <span class="band {{ result.band }}">{{ result.band }} (draft)</span>
-      &nbsp; <strong>{{ result.score }}</strong> <span class="hint">points across {{ result.findings|length }} finding(s) — recalculated deterministically after your edits.</span>
-    </p>
-
-    <form action="/approve" method="post">
-      <input type="hidden" name="draft_id" value="{{ draft_id }}" />
-
-      <h2>Proposed risk findings</h2>
-      {% if result.findings %}
-      <table>
-        <tr><th style="width:4%">Keep</th><th>Finding &amp; evidence</th><th style="width:13%">Severity</th>
-            <th style="width:9%">Points</th><th style="width:17%">Informed by</th></tr>
-        {% for f in result.findings %}
-        <tr>
-          <td><input type="checkbox" name="keep_{{ loop.index0 }}" checked /></td>
-          <td>
-            <strong>{{ f.section }}</strong> · <span class="code">{{ f.factor_name }}</span><br/>
-            {{ f.reasoning }}<br/>
-            {% if f.evidence_quote %}<span class="quote">“{{ f.evidence_quote }}”</span>{% endif %}
-          </td>
-          <td>
-            <select class="sev-select" name="severity_{{ loop.index0 }}">
-              {% for s in ["info","low","medium","high"] %}
-              <option value="{{ s }}" {% if f.severity.value == s %}selected{% endif %}>{{ s }}</option>
-              {% endfor %}
-            </select>
-          </td>
-          <td><input type="number" name="points_{{ loop.index0 }}" value="{{ f.suggested_points }}" min="0" max="20" /></td>
-          <td class="code">
-            {% if f.precedent_case_ids %}Precedents: {{ f.precedent_case_ids|join(", ") }}<br/>{% endif %}
-            {% if f.playbook_rule_ids %}Rules: {{ f.playbook_rule_ids|join(", ") }}<br/>{% endif %}
-            {% if not f.precedent_case_ids and not f.playbook_rule_ids %}New — no precedent<br/>{% endif %}
-            Confidence {{ (f.confidence * 100)|round|int }}%
-          </td>
-        </tr>
-        {% endfor %}
-      </table>
-      <p class="hint">Confidence is the model's self-assessed certainty; findings under 60% are automatically flagged for referral.</p>
-      {% else %}
-      <p class="none">No findings proposed.</p>
-      {% endif %}
-
-      <h2>Add a finding the system missed</h2>
-      <table>
-        <tr class="addrow">
-          <td><input type="text" name="new_factor_name" placeholder="factor_name (snake_case)" style="width:100%" /></td>
-          <td style="width:18%"><input type="text" name="new_section" placeholder="Section" style="width:100%" /></td>
-          <td style="width:13%">
-            <select class="sev-select" name="new_severity">
-              {% for s in ["info","low","medium","high"] %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
-            </select>
-          </td>
-          <td style="width:9%"><input type="number" name="new_points" value="0" min="0" max="20" /></td>
-        </tr>
-        <tr class="addrow"><td colspan="4"><input type="text" name="new_reasoning" placeholder="Why is this a risk? (leave factor name blank to skip)" style="width:100%" /></td></tr>
-      </table>
-
-      {% if result.dropped %}
-      <h2>Dropped by guardrails</h2>
-      <ul class="refer">
-        {% for f, reason in result.dropped %}
-        <li class="dropped"><span class="code">{{ f.factor_name }}</span> — {{ reason }}</li>
-        {% endfor %}
-      </ul>
-      {% endif %}
-
-      <h2>Referrals</h2>
-      {% if result.referrals %}
-      <ul class="refer">{% for r in result.referrals %}<li>{{ r }}</li>{% endfor %}</ul>
-      {% else %}<p class="none">None.</p>{% endif %}
-
-      {% if draft.overall_notes %}
-      <h2>Assessor notes</h2>
-      <ul class="refer">{% for n in draft.overall_notes %}<li>{{ n }}</li>{% endfor %}</ul>
-      {% endif %}
-
-      <div class="approve-row">
-        <button type="submit">Approve — store case &amp; update playbook</button>
-        <span class="hint">Approval is the learning signal: only approved cases enter memory.</span>
-      </div>
-    </form>
+  <div class="review-top">
+    <div><div class="eyebrow">Human decision workspace</div><h1>{{ draft.client_profile.business_name or "Unnamed applicant" }}</h1><p class="sub" style="margin:0">{{ draft.client_profile.industry or "Industry not identified" }} · Drafted by {{ engine }} · {{ generated_at }}</p></div>
+    <div class="page-actions">
+      <div class="stepper"><span class="step done"><span class="step-num">✓</span>Assess</span><span class="step active"><span class="step-num">2</span>Review</span><span class="step"><span class="step-num">3</span>Learn</span></div>
+      <div class="score-summary"><div><div class="hint">Draft risk score</div><div><span class="score-value" id="live-score">{{ result.score }}</span> <span class="hint">points</span></div></div><span class="band {{ result.band }}" id="live-band">{{ result.band }}</span></div>
+    </div>
   </div>
 
-  <p class="pagenav"><a href="/">← New assessment</a> · <a href="/cases">Case memory</a> · <a href="/playbook">Playbook</a></p>
+  <form id="approval-form" action="/approve" method="post">
+    <input type="hidden" name="draft_id" value="{{ draft_id }}" />
+    <div class="workspace">
+      <section class="card source-panel">
+        <div class="panel-head"><div><h2>Source application</h2><div class="hint">Select text to evidence a reviewer-added finding</div></div><span class="pill"><span class="status-dot"></span>Original</span></div>
+        <div class="source-body"><pre class="source-doc" id="source-document">{{ raw_text }}</pre></div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Proposed risk findings</h2><span>{{ result.findings|length }} verified · click evidence to locate source</span></div>
+        <div class="finding-stack">
+          {% for f in result.findings %}
+          <article class="finding-card" data-evidence="{{ f.evidence_quote }}">
+            <div class="finding-head">
+              <div class="finding-title"><input class="keep" type="checkbox" name="keep_{{ loop.index0 }}" checked aria-label="Keep {{ f.factor_name }}" /><div><h3 class="factor">{{ f.section }} <span class="mono">/ {{ f.factor_name }}</span></h3><span class="severity {{ f.severity.value }}">{{ f.severity.value }} severity</span></div></div>
+              <div class="finding-controls">
+                <div><label for="severity_{{ loop.index0 }}">Severity</label><select class="severity-input" id="severity_{{ loop.index0 }}" name="severity_{{ loop.index0 }}">{% for s in ["info","low","medium","high"] %}<option value="{{ s }}" {% if f.severity.value == s %}selected{% endif %}>{{ s|title }}</option>{% endfor %}</select></div>
+                <div><label for="points_{{ loop.index0 }}">Points</label><input class="points-input" id="points_{{ loop.index0 }}" type="number" name="points_{{ loop.index0 }}" value="{{ f.suggested_points }}" min="0" max="20" /></div>
+              </div>
+            </div>
+            <div class="finding-body">
+              <div class="reasoning">{{ f.reasoning }}</div>
+              <div class="evidence" title="Locate this evidence in the source"><span>“</span><span>{{ f.evidence_quote }}</span></div>
+              <div class="audit-row"><span class="hint">Informed by</span>
+                {% for cid in f.precedent_case_ids %}<a class="audit-chip" href="/cases/{{ cid }}" target="_blank">↗ {{ cid }}</a>{% endfor %}
+                {% for rid in f.playbook_rule_ids %}<a class="audit-chip" href="/playbook#{{ rid }}" target="_blank">§ {{ rid }}</a>{% endfor %}
+                {% if not f.precedent_case_ids and not f.playbook_rule_ids %}<span class="pill">Novel finding</span>{% endif %}
+                <span class="confidence">Model confidence {{ (f.confidence * 100)|round|int }}%</span>
+              </div>
+            </div>
+          </article>
+          {% else %}<div class="card empty">No evidence-backed findings were proposed. Add one below if the source supports it.</div>{% endfor %}
+        </div>
+
+        <div class="section-head"><h2>Add a missed finding</h2><span>Reviewer-authored · evidence required</span></div>
+        <div class="add-card">
+          <div class="add-grid">
+            <div><label>Factor name</label><input type="text" name="new_factor_name" placeholder="e.g. missing_fire_certificate" /></div>
+            <div><label>Section</label><input type="text" name="new_section" placeholder="Fire" /></div>
+            <div><label>Severity</label><select name="new_severity">{% for s in ["info","low","medium","high"] %}<option value="{{ s }}" {% if s == "medium" %}selected{% endif %}>{{ s|title }}</option>{% endfor %}</select></div>
+            <div><label>Points</label><input type="number" name="new_points" value="0" min="0" max="20" /></div>
+          </div>
+          <div class="add-grid-wide">
+            <div><label>Underwriter reasoning</label><input type="text" name="new_reasoning" placeholder="Explain why this affects the risk" /></div>
+            <div class="evidence-picker"><label>Verbatim source evidence</label><input id="new-evidence" type="text" name="new_evidence_quote" placeholder="Select text in the source document" /><button type="button" class="secondary" id="use-selection">Use selection</button></div>
+          </div>
+        </div>
+
+        {% if result.referrals or result.dropped %}
+        <div class="section-head"><h2>Decision referrals</h2><span>Explicit human attention required</span></div>
+        <div class="referral-list">
+          {% for r in result.referrals %}<div class="referral"><span>◆</span><span>{{ r }}</span></div>{% endfor %}
+          {% for f, reason in result.dropped %}<div class="referral"><span>×</span><span><span class="mono">{{ f.factor_name }}</span> was removed: {{ reason }}.</span></div>{% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="approve-bar"><div><strong>Ready for an underwriting decision</strong><span>Approval stores this case. Any playbook change will still require your explicit acceptance.</span></div><button type="submit">Approve assessment <span>→</span></button></div>
+      </section>
+    </div>
+  </form>
+  <div class="loading-overlay" id="approval-loading"><div class="loading-card"><div class="eyebrow" style="color:#64c5cb">Securing decision</div><h2 style="color:#fff;font-size:22px">Recording the approved case</h2><div class="loading-line"></div><p style="color:#a9bac6;margin:0">Preparing a governed learning proposal…</p></div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const caps={info:2,low:6,medium:12,high:20};
+  const bandFor=s=>s>=50?'High':s>=30?'Elevated':s>=15?'Moderate':'Low';
+  function recalc(){let total=0;document.querySelectorAll('.finding-card').forEach(card=>{if(card.querySelector('.keep').checked){const sev=card.querySelector('.severity-input').value;const input=card.querySelector('.points-input');input.max=caps[sev];const value=Math.max(0,Math.min(Number(input.value)||0,caps[sev]));total+=value;}});document.getElementById('live-score').textContent=total;const band=bandFor(total),el=document.getElementById('live-band');el.textContent=band;el.className='band '+band;}
+  document.querySelectorAll('.keep,.severity-input,.points-input').forEach(el=>el.addEventListener('input',recalc));
+  const source=document.getElementById('source-document'),original=source.textContent;
+  function highlight(quote){source.replaceChildren();const at=original.toLowerCase().indexOf((quote||'').toLowerCase());if(at<0){source.textContent=original;return;}source.append(document.createTextNode(original.slice(0,at)));const mark=document.createElement('mark');mark.textContent=original.slice(at,at+quote.length);source.append(mark,document.createTextNode(original.slice(at+quote.length)));mark.scrollIntoView({behavior:'smooth',block:'center'});}
+  document.querySelectorAll('.finding-card').forEach(card=>card.addEventListener('click',event=>{if(event.target.closest('input,select,a'))return;document.querySelectorAll('.finding-card').forEach(c=>c.classList.remove('active'));card.classList.add('active');highlight(card.dataset.evidence);}));
+  let selectedEvidence='';source.addEventListener('mouseup',()=>{const selection=window.getSelection();if(selection&&source.contains(selection.anchorNode))selectedEvidence=selection.toString().trim();});
+  document.getElementById('use-selection').addEventListener('click',()=>{document.getElementById('new-evidence').value=selectedEvidence;document.getElementById('new-evidence').focus();});
+  document.getElementById('approval-form').addEventListener('submit',()=>document.getElementById('approval-loading').classList.add('active'));
+</script>
 {% endblock %}

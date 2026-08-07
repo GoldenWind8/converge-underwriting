@@ -11,6 +11,7 @@ The LLM decides its own risk factors; guardrails.py verifies them afterwards.
 
 from __future__ import annotations
 
+import re
 from typing import Tuple
 
 from . import llm, memory
@@ -59,6 +60,9 @@ def assess(raw_text: str, use_memory: bool = True) -> Tuple[RiskAssessmentDraft,
     draft = llm.generate(ASSESS_SYSTEM.format(playbook=playbook), user, RiskAssessmentDraft, tier="main")
     # Keep the profile from the dedicated extraction call (it drove retrieval).
     draft.client_profile = profile
+    # Keep an unforgeable runtime allow-list for the deterministic citation guardrail.
+    draft._retrieved_case_ids = {c.case_id for c in precedents}
+    draft._available_rule_ids = set(re.findall(r"\bPB-\d+\b", playbook, flags=re.IGNORECASE))
     return draft, llm.provider()
 
 

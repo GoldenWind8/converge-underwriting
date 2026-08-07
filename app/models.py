@@ -15,9 +15,9 @@ Three ideas, three models:
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Set
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 class Severity(str, Enum):
@@ -53,6 +53,11 @@ class RiskAssessmentDraft(BaseModel):
     client_profile: ClientProfile
     findings: List[RiskFinding] = Field(default_factory=list)
     overall_notes: List[str] = Field(default_factory=list, description="Ambiguities, missing information, or general observations.")
+
+    # Runtime-only provenance: the exact context supplied to the assessment model.
+    # These are deliberately excluded from the model schema and persisted record.
+    _retrieved_case_ids: Optional[Set[str]] = PrivateAttr(default=None)
+    _available_rule_ids: Optional[Set[str]] = PrivateAttr(default=None)
 
 
 class Correction(BaseModel):

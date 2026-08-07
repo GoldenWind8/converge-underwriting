@@ -10,17 +10,19 @@ raw input ─▶ ASSESS ─▶ GUARDRAILS ─▶ HUMAN REVIEW ─▶ REPORT
              ▲  ▲       (deterministic)     │
              │  └── playbook.md             ├─▶ case memory (SQLite)
              └───── similar past cases ◀────┘        │
-                                                     └─▶ REFLECT → playbook.md
+                                                     └─▶ REFLECT → REVIEW DIFF → playbook.md
 ```
 
 - **Assess** — the LLM proposes its own risk factors, informed by the playbook and
   the k most comparable approved cases. Every finding must quote verbatim evidence.
 - **Guardrails** — deterministic: hallucinated evidence is dropped, points are capped
   per severity, bands are fixed, novel/low-confidence findings are referred to a human.
-- **Human review** — the report is an editable draft; **Approve** is the learning signal.
+- **Human review** — a split-screen decision workspace links each finding to its
+  source evidence, recalculates scores live, and makes precedents and rules inspectable.
   Only approved cases ever enter memory.
-- **Reflect** — after each sign-off, corrections are distilled into `data/playbook.md`
-  (human-readable, versioned in `data/playbook_history/`).
+- **Reflect** — after sign-off, corrections become an editable playbook proposal.
+  The underwriter must accept it before it becomes active; every previous version is
+  retained in `data/playbook_history/`.
 
 How the pieces link together (with diagrams): **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 Full design rationale: **[docs/SOLUTION_DESIGN.md](docs/SOLUTION_DESIGN.md)**.
@@ -38,9 +40,10 @@ python -m app.ingest_chats        # optional: seed memory from sample historical
 uvicorn app.main:app --reload     # open http://127.0.0.1:8000
 ```
 
-Paste `sample_data/sample_application.md` (any free-form text works), review the
-draft, change a severity, approve — then assess a similar client and watch the
-finding cite the precedent case and the new playbook rule.
+Paste `sample_data/sample_application.md` (or click **Load guided sample**), review
+the draft, change a severity, approve the case, and accept the proposed playbook
+lesson. Assess a similar client and watch the next finding cite both the precedent
+case and the newly governed rule.
 
 ## Choosing the AI
 

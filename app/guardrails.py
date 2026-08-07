@@ -40,6 +40,7 @@ class GuardrailResult:
     score: int = 0
     band: str = "Low"
     referrals: List[str] = field(default_factory=list)
+    invalid_citations: List[str] = field(default_factory=list)
 
 
 def band_for_score(score: int) -> str:
@@ -55,6 +56,12 @@ def _normalise(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
 
+def evidence_is_present(quote: str, raw_text: str) -> bool:
+    """Return whether a non-empty evidence quote occurs in the source text."""
+    normalised_quote = _normalise(quote)
+    return bool(normalised_quote and normalised_quote in _normalise(raw_text))
+
+
 def apply(draft: RiskAssessmentDraft, raw_text: str) -> GuardrailResult:
     result = GuardrailResult()
     doc = _normalise(raw_text)
@@ -64,9 +71,24 @@ def apply(draft: RiskAssessmentDraft, raw_text: str) -> GuardrailResult:
         if not quote or quote not in doc:
             result.dropped.append((f, "evidence quote not found verbatim in the source document"))
             continue
+        precedent_ids = f.precedent_case_ids
+        rule_ids = f.playbook_rule_ids
+        if draft._retrieved_case_ids is not None:
+            invalid = [cid for cid in precedent_ids if cid not in draft._retrieved_case_ids]
+            result.invalid_citations.extend(f"{f.factor_name}: unknown precedent {cid}" for cid in invalid)
+            precedent_ids = [cid for cid in precedent_ids if cid in draft._retrieved_case_ids]
+        if draft._available_rule_ids is not None:
+            available_rules = {rid.upper() for rid in draft._available_rule_ids}
+            invalid = [rid for rid in rule_ids if rid.upper() not in available_rules]
+            result.invalid_citations.extend(f"{f.factor_name}: unknown rule {rid}" for rid in invalid)
+            rule_ids = [rid.upper() for rid in rule_ids if rid.upper() in available_rules]
         cap = POINT_CAPS[f.severity]
         capped = max(0, min(f.suggested_points, cap))
-        result.findings.append(f.model_copy(update={"suggested_points": capped}))
+        result.findings.append(f.model_copy(update={
+            "suggested_points": capped,
+            "precedent_case_ids": precedent_ids,
+            "playbook_rule_ids": rule_ids,
+        }))
 
     result.findings.sort(key=lambda f: -f.suggested_points)
     result.score = sum(f.suggested_points for f in result.findings)
@@ -84,6 +106,12 @@ def apply(draft: RiskAssessmentDraft, raw_text: str) -> GuardrailResult:
         result.referrals.append(
             "NOVEL finding(s) with no precedent case or playbook rule — human review required: "
             + ", ".join(novel) + "."
+        )
+
+    if result.invalid_citations:
+        result.referrals.append(
+            "Unverified audit citation(s) were removed — human review required: "
+            + "; ".join(result.invalid_citations) + "."
         )
 
     for threshold, _band in BAND_THRESHOLDS:

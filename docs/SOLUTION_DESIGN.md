@@ -1,6 +1,6 @@
 # Solution Design — Self-Learning Risk Assessment
 
-**Status:** Implemented — v1.2, 2026-07-09 (see [ARCHITECTURE.md](ARCHITECTURE.md) for the as-built map)
+**Status:** Implemented — v1.3, 2026-08-07 (see [ARCHITECTURE.md](ARCHITECTURE.md) for the as-built map)
 **Supersedes:** the fixed-schema + deterministic-rules design described in the README —
 that legacy pipeline has been **removed entirely** (client decision, 2026-07-09): an LLM
 is required and the app fails fast at startup without a key. What survives of the old
@@ -333,10 +333,9 @@ cheaper and produces a calmer playbook at production volume. This is one
 config flag.
 
 ### 6.5 ⚖️ Playbook write access — LLM-drafted, human-owned?
-Recommended: the LLM edits `playbook.md` but every edit is shown as a diff on
-the review screen, and the underwriter can revert/edit. The stricter variant —
-playbook edits *themselves* require approval — is more defensible to an
-insurer but adds review burden. Ask the client which they want to demo.
+Implemented: the LLM drafts an editable playbook update after case approval, but
+the update only becomes active when the underwriter explicitly accepts it. The
+underwriter can edit or skip the proposal, and the previous version is archived.
 
 ### 6.6 ⚖️ Precedent scope — global memory vs per-insurer partitions
 If this is pitched to multiple insurers, does insurer A's correction history

@@ -1,111 +1,57 @@
 {% extends "base.html" %}
-
-{% block title %}Underwriting Report — {{ case.client_profile.business_name or "Applicant" }}{% endblock %}
-
+{% block title %}Decision {{ case.case_id }} — Aegis{% endblock %}
 {% block css %}
 <style>
-  header.doc { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
-               border-bottom: 3px solid var(--accent); padding-bottom: 1.1rem; margin-bottom: 1.4rem; }
-  .doc-kicker { font-size: .7rem; font-weight: 600; text-transform: uppercase;
-                letter-spacing: .12em; color: var(--muted); margin-bottom: .3rem; }
-  .doc h1 { font-size: 1.55rem; }
-  .meta { color: var(--muted); font-size: .8rem; text-align: right; }
-  .scorecard { display: flex; gap: 1.25rem; align-items: center; margin: .6rem 0 1rem; }
-  .band.big { font-size: .95rem; padding: .45rem 1.1rem; }
-  .score-num { font-size: 2.2rem; font-weight: 700; color: var(--navy); }
-  .sev { font-weight: 600; white-space: nowrap; }
-  .sev.high { color: var(--high); } .sev.medium { color: var(--elevated); }
-  .sev.low { color: var(--moderate); } .sev.info { color: var(--muted); }
-  ul.refer { margin: .4rem 0; padding-left: 1.2rem; } ul.refer li { margin-bottom: .35rem; }
-  .learn { background: #fdf6ea; border: 1px solid #f2ddb4; border-left: 4px solid var(--accent);
-           border-radius: 8px; padding: .8rem 1rem; font-size: .88rem; margin-top: 1.4rem; }
-  .foot { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line);
-          color: var(--muted); font-size: .78rem; }
+  .success-head { display:flex; align-items:center; gap:15px; margin-bottom:24px; padding:18px 20px; border:1px solid #a9d5c6; border-radius:13px; background:#eef9f5; }
+  .success-icon { display:grid; place-items:center; flex:0 0 38px; height:38px; color:#fff; border-radius:50%; background:var(--low); font-size:18px; }
+  .success-head h2 { margin:0 0 2px; }.success-head p { margin:0; color:#527468; font-size:12px; }
+  .report-grid { display:grid; grid-template-columns:1fr 300px; gap:18px; align-items:start; }
+  .document { overflow:hidden; }.document-head { padding:28px; color:#fff; background:linear-gradient(135deg,var(--navy-900),#163b53); }
+  .doc-top { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+  .document-head h1 { color:#fff; margin:3px 0 6px; }.document-head .eyebrow { color:#79c5ca; }
+  .document-meta { color:#a9bbc7; font-size:11px; text-align:right; }
+  .score-row { display:flex; gap:26px; margin-top:24px; padding-top:20px; border-top:1px solid rgba(255,255,255,.13); }
+  .score-number { font-size:34px; font-weight:700; line-height:1; }.score-label { display:block; color:#99adbb; font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
+  .document-body { padding:28px; }.section-title { margin:29px 0 12px; padding-bottom:8px; border-bottom:1px solid var(--line-soft); font-size:13px; text-transform:uppercase; letter-spacing:.07em; }
+  .section-title:first-child { margin-top:0; }
+  .profile-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+  .profile-item { padding:12px 14px; border:1px solid var(--line-soft); border-radius:9px; background:#fafcfd; }
+  .profile-item span { display:block; margin-bottom:3px; color:var(--muted); font-size:9px; letter-spacing:.07em; text-transform:uppercase; }.profile-item strong { font-size:12px; }
+  .approved-finding { padding:16px 0; border-bottom:1px solid var(--line-soft); }.approved-finding:last-child { border:0; }
+  .approved-top { display:flex; justify-content:space-between; gap:12px; }.approved-title { margin-bottom:4px; font-weight:700; }
+  .points { min-width:52px; text-align:right; font-size:20px; font-weight:700; }.points span { display:block; color:var(--muted); font-size:9px; font-weight:500; text-transform:uppercase; }
+  .evidence-line { margin:10px 0; padding:9px 11px; color:#365967; border-left:3px solid #85bdc4; background:#f0f8f9; font:11px/1.55 'IBM Plex Mono',monospace; }
+  .side-stack { display:grid; gap:14px; position:sticky; top:86px; }.side-card { padding:18px; }.side-card h3 { margin-bottom:12px; }
+  .audit-item { display:flex; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--line-soft); font-size:11px; }.audit-item:last-child{border:0}.audit-item span:first-child{color:var(--muted)}
+  .learning { margin-top:20px; overflow:hidden; border:1px solid #d7c48f; background:#fffdf7; }
+  .learning-head { display:flex; gap:13px; padding:20px 22px; border-bottom:1px solid #eadfbe; background:var(--gold-soft); }.learning-head h2{margin:0 0 4px}.learning-head p{margin:0;color:#7b673a;font-size:12px}
+  .learning-body { padding:22px; }.learning-grid { display:grid; grid-template-columns:.8fr 1.2fr; gap:14px; }.learning-current,.learning-proposed{min-height:240px;padding:14px;border:1px solid var(--line);border-radius:9px;background:#f8fafb;white-space:pre-wrap;overflow:auto;font:11px/1.6 'IBM Plex Mono',monospace}.learning-proposed{width:100%;resize:vertical;background:#fff;border-color:#d5bf81}
+  .learning-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:14px; }.learning-actions div{display:flex;gap:8px}
+  .final-note { margin-top:18px; }.correction { padding:8px 0; border-bottom:1px solid var(--line-soft); font-size:12px; }
+  @media(max-width:920px){.report-grid{grid-template-columns:1fr}.side-stack{position:relative;top:auto;grid-template-columns:1fr 1fr}.learning-grid{grid-template-columns:1fr}}
+  @media(max-width:620px){.doc-top,.learning-actions{align-items:flex-start;flex-direction:column}.profile-grid,.side-stack{grid-template-columns:1fr}.document-meta{text-align:left}.document-head,.document-body{padding:21px}.learning-actions div{width:100%;flex-direction:column}.learning-actions button{width:100%}}
 </style>
 {% endblock %}
-
 {% block content %}
-  <div class="card">
-    <header class="doc">
-      <div>
-        <div class="doc-kicker">Underwriting report</div>
-        <h1>{{ case.client_profile.business_name or "Unnamed applicant" }}</h1>
-        <div style="margin-top:.35rem;">
-          <span class="pill">{{ case.client_profile.industry or "industry unknown" }}</span>
-          <span class="pill">case {{ case.case_id }}</span>
-        </div>
+  <div class="success-head"><span class="success-icon">✓</span><div><h2>Underwriting decision recorded</h2><p>{{ case.case_id }} is now an approved precedent. {% if learning_proposal %}Review the proposed institutional learning below before it enters the playbook.{% else %}No playbook change requires approval.{% endif %}</p></div></div>
+  <div class="report-grid">
+    <article class="card document">
+      <header class="document-head"><div class="doc-top"><div><div class="eyebrow">Approved underwriting decision</div><h1>{{ case.client_profile.business_name or "Unnamed applicant" }}</h1><span class="pill">{{ case.client_profile.industry or "Industry unknown" }}</span></div><div class="document-meta">{{ case.case_id }}<br>{{ generated_at }}<br>Human approved ✓</div></div><div class="score-row"><div><span class="score-number">{{ case.final_score }}</span><span class="score-label">Risk points</span></div><div><span class="band {{ case.final_band }}">{{ case.final_band }} risk</span><span class="score-label" style="margin-top:7px">Deterministic band</span></div><div><span class="score-number">{{ case.approved_findings|length }}</span><span class="score-label">Approved factors</span></div></div></header>
+      <div class="document-body">
+        <h2 class="section-title">Client profile</h2>
+        <div class="profile-grid"><div class="profile-item"><span>Industry / trade</span><strong>{{ case.client_profile.industry or "—" }}</strong></div><div class="profile-item"><span>Employees</span><strong>{{ case.client_profile.employees if case.client_profile.employees is not none else "—" }}</strong></div><div class="profile-item"><span>Cover requested</span><strong>{{ case.client_profile.covers_requested|join(", ") or "—" }}</strong></div><div class="profile-item"><span>Risk character</span><strong>{{ case.summary or case.client_profile.summary or "—" }}</strong></div></div>
+        <h2 class="section-title">Approved risk factors</h2>
+        {% for f in case.approved_findings %}<div class="approved-finding"><div class="approved-top"><div><div class="approved-title">{{ f.section }} <span class="mono muted">/ {{ f.factor_name }}</span></div><span class="severity {{ f.severity.value }}">{{ f.severity.value }} severity</span></div><div class="points">{{ f.suggested_points }}<span>points</span></div></div><p style="margin:8px 0">{{ f.reasoning }}</p><div class="evidence-line">“{{ f.evidence_quote }}”</div><div class="page-actions">{% for cid in f.precedent_case_ids %}<a class="audit-chip" href="/cases/{{ cid }}">↗ {{ cid }}</a>{% endfor %}{% for rid in f.playbook_rule_ids %}<a class="audit-chip" href="/playbook#{{ rid }}">§ {{ rid }}</a>{% endfor %}{% if not f.precedent_case_ids and not f.playbook_rule_ids %}<span class="pill">Reviewer-validated novel finding</span>{% endif %}</div></div>{% else %}<div class="empty">No risk factors were approved.</div>{% endfor %}
+        {% if case.corrections %}<h2 class="section-title">Reviewer changes</h2>{% for c in case.corrections %}<div class="correction"><span class="pill">{{ c.type|replace('_',' ') }}</span> <span class="mono">{{ c.factor_name }}</span> {% if c.detail %}· {{ c.detail }}{% endif %}</div>{% endfor %}{% endif %}
       </div>
-      <div class="meta">
-        Generated {{ generated_at }}<br/>
-        Human approved ✓
-      </div>
-    </header>
-
-    <div class="scorecard">
-      <span class="band big {{ case.final_band }}">{{ case.final_band }} risk</span>
-      <div>
-        <span class="score-num">{{ case.final_score }}</span>
-        <span class="muted">risk points · {{ case.approved_findings|length }} approved factor(s)</span>
-      </div>
-    </div>
-
-    <h2>Client</h2>
-    <table>
-      <tr><th style="width:30%">Industry / trade</th><td>{{ case.client_profile.industry or "—" }}</td></tr>
-      <tr><th>Employees</th><td>{{ case.client_profile.employees if case.client_profile.employees is not none else "—" }}</td></tr>
-      <tr><th>Cover requested</th><td>{{ case.client_profile.covers_requested|join(", ") or "—" }}</td></tr>
-      <tr><th>Summary</th><td>{{ case.summary or case.client_profile.summary or "—" }}</td></tr>
-    </table>
-
-    <h2>Approved risk factors</h2>
-    {% if case.approved_findings %}
-    <table>
-      <tr><th>Factor &amp; evidence</th><th style="width:12%">Severity</th><th style="width:9%">Points</th><th style="width:19%">Audit trail</th></tr>
-      {% for f in case.approved_findings %}
-      <tr>
-        <td>
-          <strong>{{ f.section }}</strong> · <span class="code">{{ f.factor_name }}</span><br/>
-          {{ f.reasoning }}
-          {% if f.evidence_quote %}<br/><span class="quote">“{{ f.evidence_quote }}”</span>{% endif %}
-        </td>
-        <td class="sev {{ f.severity.value }}">{{ f.severity.value }}</td>
-        <td>{{ f.suggested_points }}</td>
-        <td class="code">
-          {% if f.precedent_case_ids %}Precedents: {{ f.precedent_case_ids|join(", ") }}<br/>{% endif %}
-          {% if f.playbook_rule_ids %}Rules: {{ f.playbook_rule_ids|join(", ") }}<br/>{% endif %}
-          {% if not f.precedent_case_ids and not f.playbook_rule_ids %}New — no precedent{% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </table>
-    {% else %}
-    <p class="none">No risk factors approved.</p>
-    {% endif %}
-
-    {% if case.corrections %}
-    <h2>Reviewer corrections (draft → approved)</h2>
-    <ul class="refer">
-      {% for c in case.corrections %}
-      <li><span class="code">{{ c.type }}</span> — {{ c.factor_name }}{% if c.detail %} ({{ c.detail }}){% endif %}</li>
-      {% endfor %}
-    </ul>
-    {% endif %}
-
-    {% if learning_note %}
-    <div class="learn"><strong>What the system learned from this review:</strong> {{ learning_note }}
-      <a href="/playbook" class="noprint">view playbook</a></div>
-    {% endif %}
-
-    <div class="foot">
-      Every finding above carries a verbatim evidence quote, its precedent cases and playbook rules,
-      and a human sign-off. Scores are capped and banded deterministically — the AI proposes, it never
-      does the arithmetic.
-      {% if engine != "stored" %}Draft proposed by {{ engine }}, reviewed and approved by a human underwriter.{% else %}Rendered from the stored case record, originally reviewed and approved by a human underwriter.{% endif %}
-      This case is now part of the system's memory and will inform future assessments.
-    </div>
+    </article>
+    <aside class="side-stack noprint">
+      <div class="card side-card"><h3>Decision assurance</h3><div class="audit-item"><span>Evidence</span><strong>Verified</strong></div><div class="audit-item"><span>Scoring</span><strong>Deterministic</strong></div><div class="audit-item"><span>Authority</span><strong>Human approved</strong></div><div class="audit-item"><span>Memory status</span><strong style="color:var(--low)">Active precedent</strong></div></div>
+      <div class="card side-card"><h3>Next action</h3><p class="hint">Assess a comparable applicant to see this decision retrieved as precedent.</p><a class="btn" href="/" style="width:100%">New assessment →</a><a class="btn secondary" href="/cases" style="width:100%;margin-top:8px">View case memory</a></div>
+    </aside>
   </div>
 
-  <p class="pagenav noprint">
-    <a href="/">← New assessment</a> · <a href="/cases">Case memory</a> · <a href="/playbook">Playbook</a>
-  </p>
+  {% if learning_proposal %}
+  <section class="card learning noprint" id="learning-review"><div class="learning-head"><span style="font-size:22px">✦</span><div><h2>Governed learning proposal</h2><p>{{ learning_proposal.change_note }} Nothing enters the underwriting playbook until you approve it.</p></div></div><form class="learning-body" action="/learning/{{ case.case_id }}" method="post"><div class="learning-grid"><div><label>Current playbook</label><div class="learning-current">{{ learning_proposal.current_playbook }}</div></div><div><label for="proposed_playbook">Proposed update · editable</label><textarea class="learning-proposed" id="proposed_playbook" name="proposed_playbook">{{ learning_proposal.proposed_playbook }}</textarea></div></div><div class="learning-actions"><span class="hint">Accepting makes this lesson available to the very next assessment.</span><div><button class="secondary" type="submit" name="action" value="skip">Skip update</button><button type="submit" name="action" value="accept">Approve playbook update →</button></div></div></form></section>
+  {% elif learning_note %}<div class="notice final-note">{{ learning_note }}</div>{% endif %}
 {% endblock %}

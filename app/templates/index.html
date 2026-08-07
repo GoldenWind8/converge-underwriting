@@ -1,47 +1,86 @@
 {% extends "base.html" %}
-
-{% block wrap_class %}narrow{% endblock %}
-
+{% block title %}Aegis — Underwriting Intelligence{% endblock %}
 {% block css %}
 <style>
-  textarea { width: 100%; min-height: 260px; font-family: ui-monospace, Menlo, monospace;
-             font-size: .84rem; padding: .8rem; resize: vertical; }
-  .row { display: flex; gap: 1rem; align-items: flex-end; justify-content: space-between;
-         margin-top: 1.1rem; flex-wrap: wrap; }
-  .actions { display: flex; gap: .6rem; flex-wrap: wrap; }
+  .hero { display:grid; grid-template-columns:1.05fr .95fr; gap:34px; align-items:center; margin:18px 0 34px; }
+  .hero h1 { max-width:620px; font-size:46px; line-height:1.08; }
+  .hero h1 span { color:var(--brand); }
+  .hero-copy { max-width:600px; color:var(--muted); font-size:17px; }
+  .trust-row { display:flex; gap:18px; margin-top:24px; flex-wrap:wrap; }
+  .trust { display:flex; align-items:center; gap:8px; color:#486174; font-size:12px; font-weight:600; }
+  .trust svg { width:17px; color:var(--brand); }
+  .metrics { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .metric { min-height:126px; padding:21px; border:1px solid var(--line); border-radius:14px; background:rgba(255,255,255,.75); }
+  .metric:first-child { grid-column:1/-1; background:linear-gradient(135deg,var(--navy-900),var(--navy-800)); color:#fff; border:0; }
+  .metric-value { font-size:31px; font-weight:700; letter-spacing:-.04em; }
+  .metric-label { color:var(--muted); font-size:12px; }
+  .metric:first-child .metric-label { color:#9db1c0; }
+  .flow { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid var(--line-soft); }
+  .flow-step { position:relative; padding:20px 22px; border-right:1px solid var(--line-soft); }
+  .flow-step:last-child { border-right:0; }
+  .flow-num { display:grid; place-items:center; width:25px; height:25px; margin-bottom:10px; color:var(--brand); background:var(--brand-soft); border-radius:8px; font-size:11px; font-weight:700; }
+  .flow-step strong { display:block; font-size:13px; }
+  .flow-step span { color:var(--muted); font-size:11px; }
+  .submission { padding:26px; }
+  .submission textarea { min-height:260px; resize:vertical; font:12px/1.65 'IBM Plex Mono',monospace; background:#fbfcfd; }
+  .form-foot { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; margin-top:18px; flex-wrap:wrap; }
+  .file-zone { max-width:380px; }
+  .button-row { display:flex; gap:9px; }
+  .demo-tip { display:flex; gap:13px; margin-top:18px; padding:15px 17px; border-radius:11px; background:var(--gold-soft); border:1px solid #eadab5; }
+  .demo-tip strong { display:block; color:#71551c; font-size:12px; }
+  .demo-tip span { color:#866f40; font-size:11px; }
+  @media(max-width:850px){.hero{grid-template-columns:1fr}.hero h1{font-size:36px}.metrics{display:none}.flow{grid-template-columns:1fr}.flow-step{border-right:0;border-bottom:1px solid var(--line-soft)}}
 </style>
 {% endblock %}
-
 {% block content %}
-  <h1>Self-Learning Underwriting</h1>
-  <p class="sub">Assess → human review → the system learns. Every correction improves the next assessment.</p>
-
-  <form class="card" action="/assess" method="post" enctype="multipart/form-data">
-    <label for="raw_text">Paste the raw application or broker notes</label>
-    <textarea id="raw_text" name="raw_text"
-              placeholder="Any free-form text works — a filled-in form, an email, broker notes…"></textarea>
-
-    <div class="row">
-      <div>
-        <label for="file" style="margin-bottom:.3rem;">…or upload a file</label>
-        <input id="file" type="file" name="file" accept=".txt,.md,.csv" />
-      </div>
-      <div class="actions">
-        {% if sample %}
-        <button type="button" class="ghost" onclick="loadSample()">Load sample application</button>
-        {% endif %}
-        <button type="submit">Draft risk assessment</button>
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Human-led underwriting intelligence</div>
+      <h1>Every decision becomes <span>institutional knowledge.</span></h1>
+      <p class="hero-copy">Assess commercial risk against approved precedents, verify every finding against source evidence, and turn underwriter corrections into governed playbook updates.</p>
+      <div class="trust-row">
+        <span class="trust"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg>Evidence verified</span>
+        <span class="trust"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg>Human approved</span>
+        <span class="trust"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg>Fully auditable</span>
       </div>
     </div>
-  </form>
+    <div class="metrics">
+      <div class="metric"><div class="metric-value">Human in control</div><div class="metric-label">AI drafts. Deterministic guardrails verify. Underwriters decide.</div></div>
+      <div class="metric"><div class="metric-value">{{ case_count }}</div><div class="metric-label">Approved precedents</div></div>
+      <div class="metric"><div class="metric-value">{{ rule_count }}</div><div class="metric-label">Governed playbook rules</div></div>
+    </div>
+  </section>
 
-  {% if sample %}
-  <template id="sample-text">{{ sample }}</template>
-  <script>
-    function loadSample() {
-      document.getElementById("raw_text").value =
-        document.getElementById("sample-text").content.textContent.trim();
-    }
-  </script>
-  {% endif %}
+  <section class="card">
+    <div class="flow">
+      <div class="flow-step"><span class="flow-num">01</span><strong>Assess</strong><span>Discover evidence-backed risk factors</span></div>
+      <div class="flow-step"><span class="flow-num">02</span><strong>Review</strong><span>Adjust, remove, or add with full control</span></div>
+      <div class="flow-step"><span class="flow-num">03</span><strong>Learn</strong><span>Approve a governed playbook update</span></div>
+    </div>
+    <form id="assess-form" class="submission" action="/assess" method="post" enctype="multipart/form-data">
+      <label for="raw_text">Application document or broker notes</label>
+      <textarea id="raw_text" name="raw_text" placeholder="Paste a commercial insurance application, email, or broker notes…"></textarea>
+      <div class="form-foot">
+        <div class="file-zone"><label for="file">Or upload a document</label><input id="file" type="file" name="file" accept=".txt,.md,.csv" /><div class="hint">TXT, Markdown, or CSV · maximum 250 KB</div></div>
+        <div class="button-row">
+          {% if sample %}<button type="button" class="secondary" id="load-sample">Load guided sample</button>{% endif %}
+          <button type="submit">Begin assessment <span aria-hidden="true">→</span></button>
+        </div>
+      </div>
+      <div class="demo-tip"><span>✦</span><div><strong>Recommended demo journey</strong><span>Load the sample, adjust a finding during review, approve the proposed lesson, then assess a similar risk to see the new precedent in action.</span></div></div>
+    </form>
+  </section>
+  {% if sample %}<template id="sample-text">{{ sample }}</template>{% endif %}
+  <div class="loading-overlay" id="loading"><div class="loading-card"><div class="eyebrow" style="color:#64c5cb">Assessment in progress</div><h2 style="color:#fff;font-size:22px">Building an evidence-linked risk view</h2><div class="loading-line"></div><p id="loading-stage" style="color:#a9bac6;margin:0">Extracting the client profile…</p></div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const sampleButton=document.getElementById('load-sample');
+  if(sampleButton) sampleButton.addEventListener('click',()=>{document.getElementById('raw_text').value=document.getElementById('sample-text').content.textContent.trim();document.getElementById('raw_text').focus();});
+  document.getElementById('assess-form').addEventListener('submit',()=>{
+    document.getElementById('loading').classList.add('active');
+    const stages=['Extracting the client profile…','Retrieving comparable approved cases…','Applying underwriting intelligence…','Verifying evidence and scoring…'];let i=0;
+    setInterval(()=>{i=Math.min(i+1,stages.length-1);document.getElementById('loading-stage').textContent=stages[i];},1500);
+  });
+</script>
 {% endblock %}

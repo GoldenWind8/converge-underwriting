@@ -1,30 +1,8 @@
 {% extends "base.html" %}
-
-{% block title %}Case memory{% endblock %}
-
+{% block title %}Case Memory — Aegis{% endblock %}
+{% block css %}<style>.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:22px}.search{max-width:330px;position:relative}.case-link{font-weight:700;text-decoration:none}.case-link:hover{text-decoration:underline}.summary{max-width:520px;color:#4e6475}.memory-table{overflow:auto}.source-tag{text-transform:capitalize}@media(max-width:700px){.page-head{align-items:stretch;flex-direction:column}.search{max-width:none}.hide-small{display:none}}</style>{% endblock %}
 {% block content %}
-  <h1>Case memory <span class="pill">{{ cases|length }} approved case(s)</span></h1>
-  <p class="sub">Every approved assessment becomes a precedent that informs the next one.</p>
-
-  <div class="card">
-    {% if cases %}
-    <table>
-      <tr><th>Case</th><th>Client</th><th>Summary</th><th>Band</th><th>Source</th><th>Approved</th></tr>
-      {% for c in cases %}
-      <tr>
-        <td><a href="/cases/{{ c.case_id }}">{{ c.case_id }}</a></td>
-        <td>{{ c.client_profile.business_name or "—" }}</td>
-        <td>{{ c.summary or c.client_profile.summary }}</td>
-        <td><span class="band {{ c.final_band }}">{{ c.final_band }}</span></td>
-        <td><span class="pill">{{ c.source }}</span></td>
-        <td>{{ c.created_at[:16].replace("T", " ") }}</td>
-      </tr>
-      {% endfor %}
-    </table>
-    {% else %}
-    <p class="none">No cases yet — approve an assessment to seed the system's memory.</p>
-    {% endif %}
-  </div>
-
-  <p class="pagenav"><a href="/">← New assessment</a> · <a href="/playbook">Playbook</a></p>
+  <div class="page-head"><div><div class="eyebrow">Approved institutional memory</div><h1>Case memory</h1><p class="sub" style="margin:0">Every record is a human-approved decision available as future precedent.</p></div><div class="page-actions"><div class="search"><label for="case-search">Search memory</label><input id="case-search" type="search" placeholder="Client, industry, factor or case ID" /></div><form action="/demo/reset" method="post" onsubmit="return confirm('Reset all active POC cases and the current playbook? The previous playbook will remain archived.');"><button class="danger" type="submit">Reset POC</button></form></div></div>
+  <div class="card memory-table">{% if cases %}<table id="case-table"><thead><tr><th>Case</th><th>Client</th><th class="hide-small">Risk character</th><th>Decision</th><th class="hide-small">Provenance</th></tr></thead><tbody>{% for c in cases %}<tr data-search="{{ c.case_id }} {{ c.client_profile.business_name }} {{ c.client_profile.industry }} {{ c.summary }} {% for f in c.approved_findings %}{{ f.factor_name }} {% endfor %}"><td><a class="case-link mono" href="/cases/{{ c.case_id }}">{{ c.case_id }}</a><div class="hint">{{ c.created_at[:10] }}</div></td><td><strong>{{ c.client_profile.business_name or "Unnamed applicant" }}</strong><div class="hint">{{ c.client_profile.industry or "Industry unknown" }}</div></td><td class="summary hide-small">{{ c.summary or c.client_profile.summary }}</td><td><span class="band {{ c.final_band }}">{{ c.final_band }}</span><div class="hint" style="margin-top:5px">{{ c.final_score }} pts · {{ c.approved_findings|length }} factors</div></td><td class="hide-small"><span class="pill source-tag">{{ c.source|replace('_',' ') }}</span><div class="hint" style="margin-top:6px">Human approved</div></td></tr>{% endfor %}</tbody></table><div class="empty" id="no-results" hidden>No cases match that search.</div>{% else %}<div class="empty"><h2>No approved cases yet</h2><p>Run and approve an assessment to create the first precedent.</p><a class="btn" href="/">Start an assessment</a></div>{% endif %}</div>
 {% endblock %}
+{% block scripts %}<script>const search=document.getElementById('case-search'),rows=[...document.querySelectorAll('#case-table tbody tr')],empty=document.getElementById('no-results');if(search)search.addEventListener('input',()=>{const q=search.value.trim().toLowerCase();let visible=0;rows.forEach(row=>{const show=row.dataset.search.toLowerCase().includes(q);row.hidden=!show;if(show)visible++});if(empty)empty.hidden=visible!==0;});</script>{% endblock %}

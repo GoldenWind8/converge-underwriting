@@ -136,7 +136,16 @@ def save_playbook(text: str) -> None:
     if p.exists():
         stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         (history / f"playbook-{stamp}.md").write_text(p.read_text(encoding="utf-8"), encoding="utf-8")
-    p.write_text(text, encoding="utf-8")
+    temporary = p.with_suffix(".tmp")
+    temporary.write_text(text, encoding="utf-8")
+    temporary.replace(p)
+
+
+def reset_demo_data() -> None:
+    """Reset active POC memory while retaining the archived playbook history."""
+    with _connect() as conn:
+        conn.execute("DELETE FROM cases")
+    save_playbook(PLAYBOOK_STUB)
 
 
 # --------------------------------------------------------------------------- #
@@ -145,6 +154,13 @@ def save_playbook(text: str) -> None:
 class _PlaybookUpdate(BaseModel):
     playbook_markdown: str = Field(..., description="The complete updated playbook markdown.")
     change_note: str = Field(..., description="One sentence describing what changed and why.")
+
+
+class LearningProposal(BaseModel):
+    case_id: str
+    current_playbook: str
+    proposed_playbook: str
+    change_note: str
 
 
 REFLECT_SYSTEM = """You maintain an insurance underwriting playbook: compact, natural-language
@@ -163,8 +179,8 @@ Rules for the playbook:
 - Never invent lessons the case does not support."""
 
 
-def reflect(case: CaseRecord) -> Optional[str]:
-    """Update the playbook from one approved case. Returns a change note, or None."""
+def propose_reflection(case: CaseRecord) -> Optional[LearningProposal]:
+    """Draft, but do not apply, a playbook update from an approved case."""
     playbook = load_playbook()
     corrections = "\n".join(f"- {c.type}: {c.factor_name} {c.detail}".strip() for c in case.corrections) or "(none — approved as drafted)"
     approved = "\n".join(
@@ -180,6 +196,19 @@ def reflect(case: CaseRecord) -> Optional[str]:
     )
     update = llm.generate(REFLECT_SYSTEM, user, _PlaybookUpdate, tier="main")
     if update.playbook_markdown.strip() and update.playbook_markdown.strip() != playbook.strip():
-        save_playbook(update.playbook_markdown)
-        return update.change_note
+        return LearningProposal(
+            case_id=case.case_id,
+            current_playbook=playbook,
+            proposed_playbook=update.playbook_markdown,
+            change_note=update.change_note,
+        )
     return None
+
+
+def reflect(case: CaseRecord) -> Optional[str]:
+    """Compatibility helper for CLI ingestion: propose and immediately apply."""
+    proposal = propose_reflection(case)
+    if proposal is None:
+        return None
+    save_playbook(proposal.proposed_playbook)
+    return proposal.change_note
