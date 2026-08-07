@@ -33,6 +33,8 @@ raw input ─▶ ASSESS ─▶ GUARDRAILS ─▶ HUMAN REVIEW ─▶ REPORT
 
 How the pieces link together (with diagrams): **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 Full design rationale: **[docs/SOLUTION_DESIGN.md](docs/SOLUTION_DESIGN.md)**.
+Proposed merge of the two parallel builds, under review and not started:
+**[docs/CONSOLIDATION_PLAN.md](docs/CONSOLIDATION_PLAN.md)**.
 
 ## Run it
 
