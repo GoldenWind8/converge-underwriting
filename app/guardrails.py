@@ -1,15 +1,20 @@
 """
-Deterministic guardrails (docs/SOLUTION_DESIGN.md §4.3).
+Deterministic guardrails (docs/SOLUTION_DESIGN.md §4.3, reworked per
+docs/CONSOLIDATION_PLAN.md).
 
 The LLM proposes findings; this module is what keeps the output defensible.
 No LLM here — an underwriter can reproduce everything in this file by hand.
 
   1. Evidence check — a finding whose evidence_quote does not appear in the
-     source document is DROPPED (kills hallucinated evidence).
-  2. Point caps — suggested_points are clamped per severity tier.
-  3. Band mapping — total score -> risk band, fixed thresholds.
-  4. Referral triggers — low confidence, novel findings (no precedent and no
-     playbook rule), and scores near a band boundary go to a human.
+     source document is DROPPED (kills hallucinated evidence). Quotes that are
+     too short or made only of stopwords are also dropped: the word "Yes"
+     appearing somewhere in a form is not evidence of anything.
+  2. Citation allow-list — precedent/rule citations not actually supplied to
+     the model are removed and referred.
+  3. Band mapping — the severity profile -> referral band. Categorical only;
+     there is deliberately no score anywhere in this system.
+  4. Referral triggers — low confidence, novel findings, severe findings, and
+     one driver undermining three or more sections go to a human.
 """
 
 from __future__ import annotations
@@ -18,35 +23,52 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Tuple
 
-from .models import RiskAssessmentDraft, RiskFinding, Severity
+from .drivers import REFERRAL_SECTION_COUNT, group_drivers, referral_drivers
+from .models import (SEVERITY_ORDER, DriverGroup, RiskAssessmentDraft,
+                     RiskFinding, Severity)
+from .sections import section
 
-POINT_CAPS = {
-    Severity.info: 2,
-    Severity.low: 6,
-    Severity.medium: 12,
-    Severity.high: 20,
+CONFIDENCE_FLOOR = 0.6
+
+# Evidence quotes below this length (normalised), or made only of stopwords,
+# are rejected: they prove the words exist, not that the finding is evidenced.
+MIN_QUOTE_CHARS = 12
+STOPWORDS = {
+    "yes", "no", "none", "n/a", "na", "the", "a", "an", "and", "or", "of",
+    "to", "in", "on", "at", "for", "is", "are", "was", "not", "with",
 }
 
-# score >= threshold -> band (checked top-down)
-BAND_THRESHOLDS = [(50, "High"), (30, "Elevated"), (15, "Moderate")]
-BOUNDARY_MARGIN = 3  # within this of a threshold -> refer to a human
-CONFIDENCE_FLOOR = 0.6
+# Deterministic band rule, checked top-down. Reproducible by hand:
+#   High      any severe finding, or three or more high
+#   Elevated  any high finding, or three or more medium
+#   Moderate  any medium finding
+#   Low       otherwise
+BAND_RULE_TEXT = (
+    "High: any severe finding, or 3+ high. Elevated: any high, or 3+ medium. "
+    "Moderate: any medium. Low: otherwise."
+)
 
 
 @dataclass
 class GuardrailResult:
     findings: List[RiskFinding] = field(default_factory=list)
     dropped: List[Tuple[RiskFinding, str]] = field(default_factory=list)
-    score: int = 0
     band: str = "Low"
     referrals: List[str] = field(default_factory=list)
     invalid_citations: List[str] = field(default_factory=list)
+    driver_groups: List[DriverGroup] = field(default_factory=list)
 
 
-def band_for_score(score: int) -> str:
-    for threshold, band in BAND_THRESHOLDS:
-        if score >= threshold:
-            return band
+def band_for_findings(findings: List[RiskFinding]) -> str:
+    counts = {s: 0 for s in Severity}
+    for f in findings:
+        counts[f.severity] += 1
+    if counts[Severity.severe] >= 1 or counts[Severity.high] >= 3:
+        return "High"
+    if counts[Severity.high] >= 1 or counts[Severity.medium] >= 3:
+        return "Elevated"
+    if counts[Severity.medium] >= 1:
+        return "Moderate"
     return "Low"
 
 
@@ -56,10 +78,22 @@ def _normalise(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
 
+def quote_is_substantial(quote: str) -> bool:
+    """Reject quotes too short or too generic to evidence anything."""
+    normalised = _normalise(quote)
+    words = normalised.split()
+    if len(normalised) < MIN_QUOTE_CHARS:
+        return False
+    return not all(w in STOPWORDS for w in words)
+
+
 def evidence_is_present(quote: str, raw_text: str) -> bool:
-    """Return whether a non-empty evidence quote occurs in the source text."""
+    """Return whether a substantial evidence quote occurs in the source text."""
     normalised_quote = _normalise(quote)
-    return bool(normalised_quote and normalised_quote in _normalise(raw_text))
+    return bool(
+        quote_is_substantial(quote)
+        and normalised_quote in _normalise(raw_text)
+    )
 
 
 def apply(draft: RiskAssessmentDraft, raw_text: str) -> GuardrailResult:
@@ -70,6 +104,9 @@ def apply(draft: RiskAssessmentDraft, raw_text: str) -> GuardrailResult:
         quote = _normalise(f.evidence_quote)
         if not quote or quote not in doc:
             result.dropped.append((f, "evidence quote not found verbatim in the source document"))
+            continue
+        if not quote_is_substantial(f.evidence_quote):
+            result.dropped.append((f, "evidence quote too short or generic to evidence a finding"))
             continue
         precedent_ids = f.precedent_case_ids
         rule_ids = f.playbook_rule_ids
@@ -82,17 +119,21 @@ def apply(draft: RiskAssessmentDraft, raw_text: str) -> GuardrailResult:
             invalid = [rid for rid in rule_ids if rid.upper() not in available_rules]
             result.invalid_citations.extend(f"{f.factor_name}: unknown rule {rid}" for rid in invalid)
             rule_ids = [rid.upper() for rid in rule_ids if rid.upper() in available_rules]
-        cap = POINT_CAPS[f.severity]
-        capped = max(0, min(f.suggested_points, cap))
         result.findings.append(f.model_copy(update={
-            "suggested_points": capped,
             "precedent_case_ids": precedent_ids,
             "playbook_rule_ids": rule_ids,
         }))
 
-    result.findings.sort(key=lambda f: -f.suggested_points)
-    result.score = sum(f.suggested_points for f in result.findings)
-    result.band = band_for_score(result.score)
+    # Section order first (as the needs analysis lists them), worst first within.
+    result.findings.sort(key=lambda f: (section(f.section).number, -SEVERITY_ORDER[f.severity]))
+    result.band = band_for_findings(result.findings)
+    result.driver_groups = group_drivers(result.findings)
+
+    severe = [f.factor_name for f in result.findings if f.severity == Severity.severe]
+    if severe:
+        result.referrals.append(
+            "Severe finding(s) — human review required: " + ", ".join(severe) + "."
+        )
 
     low_conf = [f.factor_name for f in result.findings if f.confidence < CONFIDENCE_FLOOR]
     if low_conf:
@@ -114,13 +155,11 @@ def apply(draft: RiskAssessmentDraft, raw_text: str) -> GuardrailResult:
             + "; ".join(result.invalid_citations) + "."
         )
 
-    for threshold, _band in BAND_THRESHOLDS:
-        if abs(result.score - threshold) <= BOUNDARY_MARGIN:
-            result.referrals.append(
-                f"Score {result.score} is within {BOUNDARY_MARGIN} points of the "
-                f"{threshold}-point band boundary — human review required."
-            )
-            break
+    for group in referral_drivers(result.driver_groups):
+        result.referrals.append(
+            f"Driver '{group.driver}' undermines {group.section_count} cover sections "
+            f"at medium severity or above (threshold {REFERRAL_SECTION_COUNT}) — human review required."
+        )
 
     if result.dropped:
         names = ", ".join(f.factor_name for f, _ in result.dropped)

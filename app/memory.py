@@ -4,16 +4,21 @@ Memory: what makes the system "self-learning" (docs/SOLUTION_DESIGN.md §2, §4.
 Three parts, all file-based and inspectable:
 
 - Case memory   SQLite (data/cases.db), one row per human-approved case.
+                Chat-ingested cases are stored provisional and stay invisible
+                to retrieval until a human confirms them.
 - Retrieval     given a new client profile, a cheap "fast" model reads one-line
                 summaries of past cases and picks the k most comparable.
                 Swapping in embeddings later means replacing retrieve() only.
 - Playbook      data/playbook.md — compact natural-language lessons distilled
-                from reviewer corrections. Injected whole into every assessment
-                prompt. Every save keeps a copy in data/playbook_history/.
+                from reviewer corrections. Rules carry a section tag, and each
+                per-section assessment prompt receives only the rules for its
+                section (plus untagged/general ones). Every save keeps a copy
+                in data/playbook_history/.
 
-Reflection (reflect()) runs after each human sign-off: it diffs draft vs
-approved and updates the playbook. Governance rule: only approved cases are
-ever stored, so the system can't learn from its own unreviewed output.
+Reflection (propose_reflection()) runs after each human sign-off: it diffs
+draft vs approved and PROPOSES a playbook update — nothing is applied until
+the underwriter accepts it (human gate 3). Governance rule: only approved
+cases are ever stored, so the system can't learn from its own unreviewed output.
 
 Set UW_DATA_DIR to relocate all of this (tests point it at a temp dir).
 """
@@ -22,6 +27,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import os
+import re
 import sqlite3
 from pathlib import Path
 from typing import List, Optional
@@ -30,6 +36,7 @@ from pydantic import BaseModel, Field
 
 from . import llm
 from .models import CaseRecord, ClientProfile
+from .sections import SectionId
 
 PLAYBOOK_STUB = "# Underwriting Playbook\n\nNo lessons learned yet — rules appear here as reviewers correct assessments.\n"
 
@@ -71,6 +78,22 @@ def all_cases() -> List[CaseRecord]:
     return [CaseRecord.model_validate_json(r[0]) for r in rows]
 
 
+def active_cases() -> List[CaseRecord]:
+    """Cases usable as precedents: everything a human has signed off.
+    Provisional (unconfirmed chat-ingested) cases are excluded."""
+    return [c for c in all_cases() if not c.provisional]
+
+
+def confirm_case(case_id: str) -> Optional[CaseRecord]:
+    """Human confirmation of a provisional (ingested) case — the §7.3 gate."""
+    case = get_case(case_id)
+    if case is None or not case.provisional:
+        return case
+    case = case.model_copy(update={"provisional": False})
+    store(case)
+    return case
+
+
 def next_case_id() -> str:
     with _connect() as conn:
         n = conn.execute("SELECT COUNT(*) FROM cases").fetchone()[0]
@@ -87,7 +110,7 @@ class _RetrievalPick(BaseModel):
 def retrieve(profile: ClientProfile, k: int = 5) -> List[CaseRecord]:
     """Pick the k most comparable past cases. Returns [] on any retrieval
     failure — an assessment without precedents beats no assessment."""
-    cases = all_cases()
+    cases = active_cases()
     if not cases:
         return []
     lines = "\n".join(
@@ -141,6 +164,29 @@ def save_playbook(text: str) -> None:
     temporary.replace(p)
 
 
+_RULE_HEADER = re.compile(r"^##\s+PB-\d+.*$", re.MULTILINE | re.IGNORECASE)
+_SECTION_TAG = re.compile(r"\[([a-z0-9-]+)\]")
+
+
+def rules_for_section(playbook: str, section_id: SectionId) -> str:
+    """The playbook filtered to one section: its preamble, plus every rule
+    tagged [<section-id>] or [general] or carrying no tag at all. Untagged
+    rules are kept on purpose — better an extra lesson than a silently
+    withheld one."""
+    headers = list(_RULE_HEADER.finditer(playbook))
+    if not headers:
+        return playbook
+    kept = [playbook[: headers[0].start()].rstrip()]
+    for index, match in enumerate(headers):
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(playbook)
+        tag = _SECTION_TAG.search(match.group(0))
+        if tag is None or tag.group(1) in (section_id.value, "general"):
+            kept.append(playbook[match.start():end].rstrip())
+    if len(kept) == 1:
+        kept.append("(no playbook rules yet for this section)")
+    return "\n\n".join(part for part in kept if part) + "\n"
+
+
 def reset_demo_data() -> None:
     """Reset active POC memory while retaining the archived playbook history."""
     with _connect() as conn:
@@ -168,12 +214,17 @@ lessons distilled from human reviewers' decisions. You receive the current playb
 newly approved case (with the reviewer's corrections, if any). Return the complete updated playbook.
 
 Rules for the playbook:
-- Each rule is a markdown section: '## PB-NNN · short title' followed by 2-3 sentences
-  stating the lesson, then a 'Supporting cases: <ids>' line.
+- Each rule is a markdown section: '## PB-NNN · [section-id] short title' followed by 2-3
+  sentences stating the lesson, then a 'Supporting cases: <ids>' line. The section-id tag is
+  the cover section the lesson belongs to (e.g. [fire], [motor], [theft]); use [general] only
+  for a lesson that genuinely spans sections. Per-section assessments only receive the rules
+  tagged for their section, so an untagged or mis-tagged rule reaches the wrong prompt.
 - Rule IDs are stable — never renumber existing rules.
 - Add a rule when a correction teaches something generalisable; strengthen an existing rule
   (add the supporting case id, firm up the wording) when the case confirms it; weaken or
   retire a rule contradicted by the reviewer's decision.
+- The reviewer's own 'why' notes are the most direct statement of the lesson — quote or
+  paraphrase them in the rule where they exist.
 - Approvals with no corrections may still strengthen matching rules.
 - Keep the whole playbook under ~2500 tokens: consolidate similar rules before adding new ones.
 - Never invent lessons the case does not support."""
@@ -182,9 +233,15 @@ Rules for the playbook:
 def propose_reflection(case: CaseRecord) -> Optional[LearningProposal]:
     """Draft, but do not apply, a playbook update from an approved case."""
     playbook = load_playbook()
-    corrections = "\n".join(f"- {c.type}: {c.factor_name} {c.detail}".strip() for c in case.corrections) or "(none — approved as drafted)"
+    corrections = "\n".join(
+        f"- {c.type}: {c.factor_name} {c.detail}".strip()
+        + (f' — reviewer\'s note: "{c.note}"' if c.note else "")
+        for c in case.corrections
+    ) or "(none — approved as drafted)"
     approved = "\n".join(
-        f"- {f.factor_name} [{f.section}] severity={f.severity.value} points={f.suggested_points}: {f.reasoning}"
+        f"- {f.factor_name} [{f.section.value}] severity={f.severity.value}"
+        + (f" drivers={', '.join(f.drivers)}" if f.drivers else "")
+        + f": {f.reasoning}"
         for f in case.approved_findings
     ) or "(no findings)"
     user = (
@@ -203,12 +260,3 @@ def propose_reflection(case: CaseRecord) -> Optional[LearningProposal]:
             change_note=update.change_note,
         )
     return None
-
-
-def reflect(case: CaseRecord) -> Optional[str]:
-    """Compatibility helper for CLI ingestion: propose and immediately apply."""
-    proposal = propose_reflection(case)
-    if proposal is None:
-        return None
-    save_playbook(proposal.proposed_playbook)
-    return proposal.change_note

@@ -53,8 +53,8 @@
 
   <section class="card">
     <div class="flow">
-      <div class="flow-step"><span class="flow-num">01</span><strong>Assess</strong><span>Discover evidence-backed risk factors</span></div>
-      <div class="flow-step"><span class="flow-num">02</span><strong>Review</strong><span>Adjust, remove, or add with full control</span></div>
+      <div class="flow-step"><span class="flow-num">01</span><strong>Needs</strong><span>Confirm which of the 18 cover sections apply</span></div>
+      <div class="flow-step"><span class="flow-num">02</span><strong>Assess &amp; review</strong><span>Per-section, evidence-backed findings under your control</span></div>
       <div class="flow-step"><span class="flow-num">03</span><strong>Learn</strong><span>Approve a governed playbook update</span></div>
     </div>
     <form id="assess-form" class="submission" action="/assess" method="post" enctype="multipart/form-data">
@@ -79,7 +79,7 @@
   if(sampleButton) sampleButton.addEventListener('click',()=>{document.getElementById('raw_text').value=document.getElementById('sample-text').content.textContent.trim();document.getElementById('raw_text').focus();});
   document.getElementById('assess-form').addEventListener('submit',()=>{
     document.getElementById('loading').classList.add('active');
-    const stages=['Extracting the client profile…','Retrieving comparable approved cases…','Applying underwriting intelligence…','Verifying evidence and scoring…'];let i=0;
+    const stages=['Extracting the client profile…','Determining which cover sections apply…','Preparing the needs table for your confirmation…'];let i=0;
     setInterval(()=>{i=Math.min(i+1,stages.length-1);document.getElementById('loading-stage').textContent=stages[i];},1500);
   });
 </script>

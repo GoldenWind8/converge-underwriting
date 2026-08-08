@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Needs — {{ profile.business_name or "assessment" }} — Converge Underwriting{% endblock %}
+{% block css %}
+<style>
+  .needs-top { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:22px; }
+  .stepper { display:flex; gap:0; align-items:center; }
+  .step { display:flex; align-items:center; gap:7px; color:var(--muted-2); font-size:11px; font-weight:600; }
+  .step:not(:last-child)::after { content:""; width:28px; height:1px; margin:0 8px; background:var(--line); }
+  .step.done,.step.active { color:var(--brand-dark); }.step-num { display:grid; place-items:center; width:23px; height:23px; border:1px solid var(--line); border-radius:50%; }
+  .step.done .step-num,.step.active .step-num { color:#fff; border-color:var(--brand); background:var(--brand); }
+  .business-note { margin-bottom:18px; }
+  .needs-table td { padding:12px 14px; }
+  .sec-name { font-weight:700; white-space:nowrap; }
+  .sec-name .mono { display:block; color:var(--muted); font-weight:400; font-size:10px; }
+  .sec-scope { max-width:420px; color:var(--muted); font-size:11px; line-height:1.5; }
+  .req-select { min-width:140px; }
+  .req-select.required { border-color:#b83c3c55; background:#fdf4f4; }
+  .req-select.consider { border-color:#b4791355; background:#fdfaf2; }
+  .reason { max-width:430px; color:#40596b; font-size:12px; }
+  .motor-sub { margin-top:8px; }
+  .confirm-bar { position:sticky; bottom:12px; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:18px; padding:14px 16px; border:1px solid #bcc5fb; border-radius:12px; background:rgba(247,247,255,.95); box-shadow:0 12px 35px rgba(15,17,32,.16); backdrop-filter:blur(14px); }
+  .confirm-bar strong { display:block; font-size:12px; }.confirm-bar span { color:var(--muted); font-size:11px; }
+  @media(max-width:900px){.stepper{display:none}.sec-scope{display:none}}
+</style>
+{% endblock %}
+{% block content %}
+  <div class="needs-top">
+    <div><div class="eyebrow">Needs determination · Human gate 1</div><h1>{{ profile.business_name or "Unnamed applicant" }}</h1><p class="sub" style="margin:0">{{ profile.industry or "Industry not identified" }} · Determined by {{ engine }} · {{ generated_at }}</p></div>
+    <div class="stepper"><span class="step done"><span class="step-num">✓</span>Submit</span><span class="step active"><span class="step-num">2</span>Needs</span><span class="step"><span class="step-num">3</span>Review</span><span class="step"><span class="step-num">4</span>Learn</span></div>
+  </div>
+
+  {% if determination.business_note %}<div class="notice business-note">{{ determination.business_note }}</div>{% endif %}
+  <p class="sub">Only sections you confirm as <strong>required</strong> are assessed — one focused model call each. Getting this table right is the cheapest place to correct the system: a wrong section set wastes every assessment downstream of it.</p>
+
+  <form action="/needs/{{ needs_id }}" method="post" id="needs-form">
+    <div class="card" style="overflow:auto">
+      <table class="needs-table">
+        <thead><tr><th>Section</th><th class="hide-small">What it covers</th><th>Determination</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for need in determination.needs %}{% set cover = cover_sections[loop.index0] %}
+          <tr>
+            <td class="sec-name">{{ cover.number }}. {{ cover.name }}<span class="mono">{{ cover.id.value }}</span></td>
+            <td class="sec-scope hide-small">{{ cover.scope }}</td>
+            <td>
+              <select class="req-select {{ need.requirement.value }}" name="requirement_{{ cover.id.value }}">
+                {% for req in ["required", "consider", "not-applicable"] %}
+                <option value="{{ req }}" {% if need.requirement.value == req %}selected{% endif %}>{{ req|replace("-", " ")|title }}</option>
+                {% endfor %}
+              </select>
+              {% if cover.id.value == "motor" %}
+              <select class="motor-sub" name="motor_sub_type" aria-label="Motor sub-type">
+                <option value="" {% if not need.motor_sub_type %}selected{% endif %}>Sub-type…</option>
+                {% for sub, note in motor_sub_type_notes.items() %}
+                <option value="{{ sub.value }}" {% if need.motor_sub_type == sub %}selected{% endif %} title="{{ note }}">{{ note.split(".")[0] }}</option>
+                {% endfor %}
+              </select>
+              {% endif %}
+            </td>
+            <td class="reason">{{ need.reason }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="confirm-bar">
+      <div><strong>Confirm the section set</strong><span>What this table says required is what gets assessed — <span id="required-count">0</span> focused model call(s).</span></div>
+      <button type="submit">Assess <span id="required-count-btn">0</span> required section(s) <span aria-hidden="true">→</span></button>
+    </div>
+  </form>
+  <div class="loading-overlay" id="assess-loading"><div class="loading-card"><div class="eyebrow" style="color:#9aa8ff">Assessment in progress</div><h2 style="color:#fff;font-size:22px">Assessing each confirmed section</h2><div class="loading-line"></div><p id="loading-stage" style="color:#a9acb9;margin:0">Working through the required sections…</p></div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+  function recount(){
+    let count=0;
+    document.querySelectorAll('.req-select').forEach(sel=>{
+      sel.classList.remove('required','consider');
+      if(sel.value==='required'){count++;sel.classList.add('required');}
+      if(sel.value==='consider')sel.classList.add('consider');
+    });
+    document.getElementById('required-count').textContent=count;
+    document.getElementById('required-count-btn').textContent=count;
+  }
+  document.querySelectorAll('.req-select').forEach(sel=>sel.addEventListener('change',recount));
+  recount();
+  document.getElementById('needs-form').addEventListener('submit',()=>document.getElementById('assess-loading').classList.add('active'));
+</script>
+{% endblock %}

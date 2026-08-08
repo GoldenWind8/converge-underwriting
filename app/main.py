@@ -1,15 +1,20 @@
 """
-FastAPI app — plumbing only; the interesting logic lives in assess.py,
-guardrails.py and memory.py.
+FastAPI app — plumbing only; the interesting logic lives in needs.py,
+assess.py, guardrails.py and memory.py.
 
-The loop:
-  POST /assess    raw text -> draft findings -> guardrails -> editable review page
-  POST /approve   reviewer's edits -> CaseRecord stored -> reflection updates the
-                  playbook -> final report
-  GET  /cases     browse memory;  GET /cases/{id} re-renders a stored report
-  GET  /playbook  the current playbook
+The loop (three human gates):
+  POST /assess          raw text -> profile + needs determination -> needs table
+  POST /needs/{id}      GATE 1: the underwriter's confirmed table -> one
+                        assessment call per required section -> guardrails ->
+                        editable review page
+  POST /approve         GATE 2: reviewer's edits -> CaseRecord stored ->
+                        reflection proposes a playbook update
+  POST /learning/{id}   GATE 3: accept / edit / skip the playbook update
+  GET  /cases           browse memory;  GET /cases/{id} re-renders a stored report
+  GET  /playbook        the current playbook
 
-Drafts awaiting review are held in memory (DRAFTS) — fine for a single-process POC.
+Drafts awaiting a gate are held in memory (PENDING_NEEDS, DRAFTS) — fine for a
+single-process POC.
 """
 
 from __future__ import annotations
@@ -25,10 +30,14 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import guardrails, llm, memory
-from .assess import assess
-from .models import CaseRecord, Correction, RiskFinding, Severity
-from .report import (render_cases, render_error, render_index, render_playbook,
-                     render_report, render_review)
+from .assess import assess_profile, assess_sections
+from .drivers import group_drivers
+from .models import (CaseRecord, Correction, Requirement, RiskFinding,
+                     SectionNeed, Severity)
+from .needs import determine_needs
+from .report import (render_cases, render_error, render_index, render_needs,
+                     render_playbook, render_report, render_review)
+from .sections import MotorSubType, SectionId, section
 
 llm.require()  # no LLM configured -> fail here, at startup, with a clear message
 
@@ -39,7 +48,9 @@ _SAMPLE_PATH = Path(__file__).parent.parent / "sample_data" / "sample_applicatio
 _SAMPLE = _SAMPLE_PATH.read_text(encoding="utf-8") if _SAMPLE_PATH.exists() else ""
 _MAX_INPUT_BYTES = 250_000
 
-# draft_id -> {"draft": ..., "result": ..., "engine": ..., "raw_text": ...}
+# needs_id -> {"determination": ..., "profile": ..., "engine": ..., "raw_text": ...}
+PENDING_NEEDS: dict = {}
+# draft_id -> {"draft": ..., "result": ..., "engine": ..., "raw_text": ..., "needs": ..., "usage": ...}
 DRAFTS: dict = {}
 PENDING_LEARNING: dict[str, memory.LearningProposal] = {}
 
@@ -77,16 +88,80 @@ async def assess_route(
     file: Optional[UploadFile] = None,
 ) -> HTMLResponse:
     raw = _read_raw(raw_text, file)
+    llm.reset_usage()
     try:
-        draft, engine = assess(raw)
-        result = guardrails.apply(draft, raw)
+        profile = assess_profile(raw)
+        determination = determine_needs(raw)
     except Exception as exc:  # provider/schema failures should be recoverable in the POC UI
         return HTMLResponse(
-            render_error("Assessment could not be completed", str(exc)), status_code=502
+            render_error("Needs determination could not be completed", str(exc)), status_code=502
+        )
+    needs_id = uuid.uuid4().hex[:12]
+    PENDING_NEEDS[needs_id] = {
+        "determination": determination, "profile": profile,
+        "engine": llm.provider(), "raw_text": raw,
+    }
+    return HTMLResponse(render_needs(needs_id, determination, profile, llm.provider(), _now()))
+
+
+@app.get("/needs/{needs_id}", response_class=HTMLResponse)
+def resume_needs(needs_id: str) -> HTMLResponse:
+    pending = PENDING_NEEDS.get(needs_id)
+    if pending is None:
+        raise HTTPException(status_code=404, detail="Needs determination not found (it may have expired).")
+    return HTMLResponse(render_needs(
+        needs_id, pending["determination"], pending["profile"], pending["engine"], _now(),
+    ))
+
+
+@app.post("/needs/{needs_id}", response_class=HTMLResponse)
+async def confirm_needs(needs_id: str, request: Request) -> HTMLResponse:
+    """Human gate 1: the underwriter's confirmed table drives the assessment."""
+    pending = PENDING_NEEDS.get(needs_id)
+    if pending is None:
+        raise HTTPException(status_code=404, detail="Needs determination not found (it may have expired).")
+    form = await request.form()
+
+    confirmed: list[SectionNeed] = []
+    for need in pending["determination"].needs:
+        raw_req = form.get(f"requirement_{need.section.value}", need.requirement.value)
+        try:
+            requirement = Requirement(raw_req)
+        except ValueError:
+            requirement = need.requirement
+        update: dict = {"requirement": requirement}
+        if need.section == SectionId.motor:
+            raw_sub = (form.get("motor_sub_type") or "").strip()
+            update["motor_sub_type"] = MotorSubType(raw_sub) if raw_sub else need.motor_sub_type
+        confirmed.append(need.model_copy(update=update))
+
+    if not any(n.requirement == Requirement.required for n in confirmed):
+        return HTMLResponse(
+            render_error("No sections marked required",
+                         "Mark at least one cover section as required before assessing.",
+                         f"/needs/{needs_id}"),
+            status_code=400,
+        )
+
+    try:
+        draft, engine = assess_sections(pending["raw_text"], pending["profile"], confirmed)
+        result = guardrails.apply(draft, pending["raw_text"])
+    except Exception as exc:
+        return HTMLResponse(
+            render_error("Assessment could not be completed", str(exc), f"/needs/{needs_id}"),
+            status_code=502,
         )
     draft_id = uuid.uuid4().hex[:12]
-    DRAFTS[draft_id] = {"draft": draft, "result": result, "engine": engine, "raw_text": raw}
-    return HTMLResponse(render_review(draft_id, draft, result, engine, _now(), raw))
+    DRAFTS[draft_id] = {
+        "draft": draft, "result": result, "engine": engine,
+        "raw_text": pending["raw_text"], "needs": confirmed,
+        "usage": llm.usage_summary(),
+    }
+    PENDING_NEEDS.pop(needs_id, None)
+    return HTMLResponse(render_review(
+        draft_id, draft, result, engine, _now(), pending["raw_text"],
+        confirmed, DRAFTS[draft_id]["usage"],
+    ))
 
 
 @app.get("/review/{draft_id}", response_class=HTMLResponse)
@@ -96,7 +171,7 @@ def resume_review(draft_id: str) -> HTMLResponse:
         raise HTTPException(status_code=404, detail="Draft not found (it may have expired or been approved).")
     return HTMLResponse(render_review(
         draft_id, pending["draft"], pending["result"], pending["engine"],
-        _now(), pending["raw_text"],
+        _now(), pending["raw_text"], pending["needs"], pending.get("usage"),
     ))
 
 
@@ -117,19 +192,20 @@ async def approve(request: Request) -> HTMLResponse:
             status_code=exc.status_code,
         )
 
-    score = sum(f.suggested_points for f in approved)
-    band = guardrails.band_for_score(score)
+    approved.sort(key=lambda f: (section(f.section).number,
+                                 -guardrails.SEVERITY_ORDER[f.severity]))
     case = CaseRecord(
         case_id=memory.next_case_id(),
         created_at=_dt.datetime.now().isoformat(timespec="seconds"),
         source="assessment",
         client_profile=draft.client_profile,
         summary=draft.client_profile.summary,
+        needs=pending["needs"],
         draft_findings=result.findings,
         approved_findings=approved,
         corrections=corrections,
-        final_score=score,
-        final_band=band,
+        driver_groups=group_drivers(approved),
+        final_band=guardrails.band_for_findings(approved),
     )
     memory.store(case)
     DRAFTS.pop(draft_id, None)
@@ -147,54 +223,49 @@ async def approve(request: Request) -> HTMLResponse:
 
 
 def _apply_review(form, draft_findings, raw_text: str = "") -> tuple:
-    """Turn the review form back into approved findings + a corrections diff."""
+    """Turn the review form back into approved findings + a corrections diff.
+    Every correction can carry the reviewer's own 'why' note, remembered verbatim."""
     approved, corrections = [], []
 
     for i, f in enumerate(draft_findings):
+        note = (form.get(f"note_{i}") or "").strip()
         if form.get(f"keep_{i}") is None:
-            corrections.append(Correction(type="removed", factor_name=f.factor_name))
+            corrections.append(Correction(type="removed", factor_name=f.factor_name, note=note))
             continue
         severity = Severity(form.get(f"severity_{i}", f.severity.value))
-        try:
-            points = int(form.get(f"points_{i}", f.suggested_points))
-        except ValueError:
-            points = f.suggested_points
-        points = max(0, min(points, guardrails.POINT_CAPS[severity]))
         if severity != f.severity:
             corrections.append(Correction(
                 type="severity_changed", factor_name=f.factor_name,
-                detail=f"{f.severity.value} -> {severity.value}",
+                detail=f"{f.severity.value} -> {severity.value}", note=note,
             ))
-        if points != f.suggested_points and severity == f.severity:
-            corrections.append(Correction(
-                type="points_changed", factor_name=f.factor_name,
-                detail=f"{f.suggested_points} -> {points}",
-            ))
-        approved.append(f.model_copy(update={"severity": severity, "suggested_points": points}))
+        approved.append(f.model_copy(update={"severity": severity}))
 
     new_name = (form.get("new_factor_name") or "").strip().lower().replace(" ", "_")
     if new_name:
         severity = Severity(form.get("new_severity", "medium"))
-        try:
-            points = int(form.get("new_points", 0))
-        except ValueError:
-            points = 0
         evidence = (form.get("new_evidence_quote") or "").strip()
         if not guardrails.evidence_is_present(evidence, raw_text):
             raise HTTPException(
                 status_code=400,
-                detail="A reviewer-added finding needs an evidence quote copied from the source document.",
+                detail="A reviewer-added finding needs a substantial evidence quote copied "
+                       "from the source document (a word like 'Yes' is not evidence).",
             )
+        try:
+            new_section = SectionId(form.get("new_section", ""))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Pick the cover section for the added finding.")
+        note = (form.get("new_note") or "").strip()
         approved.append(RiskFinding(
             factor_name=new_name,
-            section=(form.get("new_section") or "General").strip() or "General",
+            section=new_section,
             severity=severity,
-            suggested_points=max(0, min(points, guardrails.POINT_CAPS[severity])),
             evidence_quote=evidence,
             reasoning=(form.get("new_reasoning") or "Added by reviewer.").strip(),
+            drivers=[d for d in (form.get("new_drivers") or "").split(",") if d.strip()],
             confidence=1.0,
         ))
-        corrections.append(Correction(type="added", factor_name=new_name, detail="added by reviewer"))
+        corrections.append(Correction(type="added", factor_name=new_name,
+                                      detail="added by reviewer", note=note))
 
     return approved, corrections
 
@@ -235,6 +306,14 @@ def case_detail(case_id: str) -> HTMLResponse:
     return HTMLResponse(render_report(case, "stored", _now()))
 
 
+@app.post("/cases/{case_id}/confirm")
+def confirm_ingested_case(case_id: str) -> RedirectResponse:
+    """Human confirmation of a provisional (chat-ingested) case — §7.3 gate."""
+    if memory.confirm_case(case_id) is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+    return RedirectResponse(url="/cases", status_code=303)
+
+
 @app.get("/playbook", response_class=HTMLResponse)
 def playbook() -> HTMLResponse:
     return HTMLResponse(render_playbook(memory.load_playbook()))
@@ -243,6 +322,7 @@ def playbook() -> HTMLResponse:
 @app.post("/demo/reset")
 def reset_demo() -> RedirectResponse:
     memory.reset_demo_data()
+    PENDING_NEEDS.clear()
     DRAFTS.clear()
     PENDING_LEARNING.clear()
     return RedirectResponse(url="/", status_code=303)

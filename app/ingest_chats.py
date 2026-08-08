@@ -4,9 +4,13 @@ Bootstrap memory from historical chat transcripts (docs/SOLUTION_DESIGN.md §4.4
     python -m app.ingest_chats [chats_dir]      # default: sample_data/chats
 
 Per transcript: an LLM extracts the client profile and the risks the human
-underwriter actually decided on -> stored as a CaseRecord
-(source="chat_ingestion") -> reflection distils the lessons into the playbook.
-Transcripts with no risk decision are skipped.
+underwriter actually decided on -> stored as a PROVISIONAL CaseRecord
+(source="chat_ingestion"). Transcripts with no risk decision are skipped.
+
+Governance (docs/CONSOLIDATION_PLAN.md §7.3): LLM-extracted cases never enter
+the live memory ungated. They are stored provisional — invisible to retrieval —
+until a human confirms each one on the /cases page, and ingestion never writes
+to the playbook.
 """
 
 from __future__ import annotations
@@ -19,8 +23,9 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from . import llm, memory
-from .guardrails import band_for_score
+from .guardrails import band_for_findings
 from .models import CaseRecord, ClientProfile, RiskFinding
+from .sections import COVER_SECTIONS
 
 
 class IngestedCase(BaseModel):
@@ -34,9 +39,12 @@ class IngestedCase(BaseModel):
 INGEST_SYSTEM = (
     "You read a historical chat between an insurance broker/client and a human underwriter. "
     "Extract the client profile and every risk factor the HUMAN decided on (these count as "
-    "human-approved findings): factor_name in snake_case, the severity and points they settled on, "
-    "and the evidence phrase from the chat. Set contains_risk_decision=false if no risk decision "
-    "was made. Do not invent findings the human did not make."
+    "human-approved findings): factor_name in snake_case, the severity they settled on "
+    "(low/medium/high/severe), the cover section it belongs to, and the evidence phrase from "
+    "the chat. Section must be one of: "
+    + ", ".join(s.id.value for s in COVER_SECTIONS)
+    + ". Set contains_risk_decision=false if no risk decision was made. "
+    "Do not invent findings the human did not make."
 )
 
 
@@ -45,7 +53,6 @@ def ingest_file(path: Path) -> Optional[CaseRecord]:
     if not extracted.contains_risk_decision or not extracted.approved_findings:
         return None
 
-    score = sum(f.suggested_points for f in extracted.approved_findings)
     case = CaseRecord(
         case_id=memory.next_case_id(),
         created_at=_dt.datetime.now().isoformat(timespec="seconds"),
@@ -55,8 +62,8 @@ def ingest_file(path: Path) -> Optional[CaseRecord]:
         draft_findings=extracted.approved_findings,
         approved_findings=extracted.approved_findings,
         corrections=[],
-        final_score=score,
-        final_band=band_for_score(score),
+        final_band=band_for_findings(extracted.approved_findings),
+        provisional=True,
     )
     memory.store(case)
     return case
@@ -74,12 +81,13 @@ def main(chats_dir: str = "sample_data/chats") -> None:
         if case is None:
             print(f"  skipped {path.name} (no risk decision found)")
             continue
-        note = memory.reflect(case)
         ingested += 1
         print(f"  {case.case_id} <- {path.name}: {len(case.approved_findings)} finding(s), "
-              f"{case.final_band} band. {note or 'No playbook change.'}")
-    print(f"\nIngested {ingested}/{len(paths)} transcript(s). "
-          f"Memory now holds {len(memory.all_cases())} case(s). See /cases and /playbook.")
+              f"{case.final_band} band. Stored PROVISIONAL — confirm it on /cases before "
+              f"it becomes a precedent.")
+    print(f"\nIngested {ingested}/{len(paths)} transcript(s) as provisional cases. "
+          f"Memory holds {len(memory.all_cases())} case(s) total; only confirmed ones "
+          f"are retrieved as precedents. See /cases.")
 
 
 if __name__ == "__main__":

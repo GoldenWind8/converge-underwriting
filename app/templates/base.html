@@ -66,8 +66,8 @@
     .band.Low { background:var(--low); } .band.Moderate { background:var(--moderate); }
     .band.Elevated { background:var(--elevated); } .band.High { background:var(--high); }
     .severity { font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
-    .severity.high { color:var(--high); } .severity.medium { color:var(--elevated); }
-    .severity.low { color:var(--moderate); } .severity.info { color:var(--muted); }
+    .severity.severe { color:#7d1f1f; } .severity.high { color:var(--high); }
+    .severity.medium { color:var(--elevated); } .severity.low { color:var(--moderate); }
     label { display:block; margin-bottom:7px; color:var(--navy-900); font-size:12px; font-weight:700; }
     textarea,select,input[type=text],input[type=number],input[type=search] {
       width:100%; border:1px solid #ccd7df; border-radius:9px; padding:10px 11px; color:var(--ink);
@@ -121,7 +121,7 @@
     </div>
   </header>
   <main class="wrap {% block wrap_class %}{% endblock %}">{% block content %}{% endblock %}</main>
-  <footer>Converge AI · Human-controlled AI · Deterministic scoring · Evidence-linked decisions</footer>
+  <footer>Converge AI · Human-controlled AI · Deterministic verification · Evidence-linked decisions · Pricing out of scope</footer>
   {% block scripts %}{% endblock %}
 </body>
 </html>
