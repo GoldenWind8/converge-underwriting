@@ -31,7 +31,6 @@ from fastapi.staticfiles import StaticFiles
 
 from . import guardrails, llm, memory
 from .assess import assess_profile, assess_sections
-from .drivers import group_drivers
 from .models import (CaseRecord, Correction, Requirement, RiskFinding,
                      SectionNeed, Severity)
 from .needs import determine_needs
@@ -204,7 +203,6 @@ async def approve(request: Request) -> HTMLResponse:
         draft_findings=result.findings,
         approved_findings=approved,
         corrections=corrections,
-        driver_groups=group_drivers(approved),
         final_band=guardrails.band_for_findings(approved),
     )
     memory.store(case)
@@ -261,7 +259,6 @@ def _apply_review(form, draft_findings, raw_text: str = "") -> tuple:
             severity=severity,
             evidence_quote=evidence,
             reasoning=(form.get("new_reasoning") or "Added by reviewer.").strip(),
-            drivers=[d for d in (form.get("new_drivers") or "").split(",") if d.strip()],
             confidence=1.0,
         ))
         corrections.append(Correction(type="added", factor_name=new_name,

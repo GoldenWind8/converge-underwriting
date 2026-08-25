@@ -5,16 +5,11 @@ not against any other codebase. Do not invent sections, do not drop any, and
 keep the scope notes faithful to the document: they are what the model reads
 when deciding whether a business needs the section.
 
-Also here: the Motor sub-types (from section 14 of the PDF) and the seed
-vocabulary for driver slugs. Drivers name the underlying fact about a business
-that causes risk across sections — the roll-up in drivers.py only works if the
-model names the same weakness identically each time, hence a fixed vocabulary
-and a normaliser.
+Also here: the Motor sub-types (from section 14 of the PDF).
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional
@@ -173,54 +168,3 @@ MOTOR_SUB_TYPE_NOTES = {
     MotorSubType.third_party_only:
         "Third Party only. Liability to third parties only.",
 }
-
-
-# Seed vocabulary for driver slugs. Kept deliberately small and reused across
-# sections: one weakness surfacing under several sections at once only works
-# if the model names it identically each time.
-DRIVER_VOCABULARY = [
-    "unsecured-overnight-parking",
-    "no-vehicle-tracking",
-    "no-driver-vetting",
-    "maintenance-not-logged",
-    "single-premises-dependency",
-    "no-fire-detection",
-    "no-sprinklers",
-    "combustible-stock",
-    "hot-work-on-site",
-    "poor-housekeeping",
-    "no-cctv",
-    "perimeter-security-only",
-    "public-access-to-premises",
-    "cash-on-premises",
-    "cash-in-transit",
-    "high-value-portable-equipment",
-    "no-data-backup",
-    "unsegregated-financial-duties",
-    "staff-vetting-gaps",
-    "high-staff-turnover",
-    "key-person-dependency",
-    "supplier-concentration",
-    "loss-history-frequency",
-    "manual-handling-and-machinery-injury-exposure",
-]
-
-
-def normalise_slug(raw: str) -> str:
-    """Kebab-case a driver slug. Drivers are the grouping key for the
-    cross-section roll-up — a slug differing only in case or spacing would
-    silently fail to group."""
-    slug = re.sub(r"[\s_]+", "-", raw.strip().lower())
-    slug = re.sub(r"[^a-z0-9-]", "", slug)
-    slug = re.sub(r"-+", "-", slug).strip("-")
-    return slug
-
-
-def normalise_slugs(raw: Optional[List[str]]) -> List[str]:
-    """Normalise and de-duplicate a driver list, dropping empties."""
-    seen: List[str] = []
-    for entry in raw or []:
-        slug = normalise_slug(entry)
-        if slug and slug not in seen:
-            seen.append(slug)
-    return seen

@@ -38,7 +38,6 @@
   .reasoning { margin-bottom:10px; color:#40596b; }
   .evidence { display:flex; gap:9px; padding:10px 12px; border-left:3px solid #899bf7; border-radius:0 8px 8px 0; background:#f2f3ff; color:#3d466f; font:11px/1.55 'IBM Plex Mono',monospace; cursor:pointer; }
   .audit-row { display:flex; align-items:center; gap:6px; margin-top:11px; flex-wrap:wrap; }
-  .driver-chip { display:inline-flex; padding:3px 8px; border-radius:999px; border:1px dashed #a9b5c9; background:#f6f8fa; color:#4e6475; font:10px 'IBM Plex Mono',monospace; }
   .confidence { margin-left:auto; color:var(--muted); font-size:10px; }
   .why-note { margin-top:11px; }
   .why-note input { font-size:12px; background:#fffdf6; border-color:#e4d9b8; }
@@ -49,11 +48,6 @@
   .add-grid-wide { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:10px; }
   .evidence-picker { position:relative; }.evidence-picker button { position:absolute; right:6px; top:29px; padding:6px 9px; font-size:10px; }
   .referral-list { display:grid; gap:8px; }.referral { display:flex; gap:10px; padding:11px 13px; border:1px solid #ead9ad; border-radius:9px; background:var(--gold-soft); color:#72591f; font-size:12px; }
-  .driver-group { padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:#fff; margin-bottom:9px; }
-  .driver-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:7px; }
-  .driver-head .slug { font:12px 'IBM Plex Mono',monospace; font-weight:700; color:var(--navy-900); }
-  .badge-across { color:var(--brand-dark); background:var(--brand-soft); border-radius:999px; padding:3px 9px; font-size:10px; font-weight:700; }
-  .driver-group ul { margin:0; padding-left:18px; font-size:12px; color:#40596b; }
   .approve-bar { position:sticky; bottom:12px; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:18px; padding:14px 16px; border:1px solid #bcc5fb; border-radius:12px; background:rgba(247,247,255,.95); box-shadow:0 12px 35px rgba(15,17,32,.16); backdrop-filter:blur(14px); }
   .approve-bar strong { display:block; font-size:12px; }.approve-bar span { color:var(--muted); font-size:11px; }
   .usage-line { margin-top:10px; color:var(--muted-2); font-size:10px; text-align:right; }
@@ -104,7 +98,6 @@
                 <div class="reasoning">{{ f.reasoning }}</div>
                 <div class="evidence" title="Locate this evidence in the source"><span>“</span><span>{{ f.evidence_quote }}</span></div>
                 <div class="audit-row">
-                  {% for d in f.drivers %}<span class="driver-chip">{{ d }}</span>{% endfor %}
                   <span class="hint" style="margin-left:6px">Informed by</span>
                   {% for cid in f.precedent_case_ids %}<a class="audit-chip" href="/cases/{{ cid }}" target="_blank">↗ {{ cid }}</a>{% endfor %}
                   {% for rid in f.playbook_rule_ids %}<a class="audit-chip" href="/playbook#{{ rid }}" target="_blank">§ {{ rid }}</a>{% endfor %}
@@ -131,20 +124,9 @@
             <div class="evidence-picker"><label>Verbatim source evidence</label><input id="new-evidence" type="text" name="new_evidence_quote" placeholder="Select text in the source document" /><button type="button" class="secondary" id="use-selection">Use selection</button></div>
           </div>
           <div class="add-grid-wide">
-            <div><label>Driver slugs <span class="hint">(optional, kebab-case)</span></label><input type="text" name="new_drivers" placeholder="e.g. no-fire-detection combustible-stock" /></div>
             <div><label>Why <span class="hint">(optional, remembered verbatim)</span></label><input type="text" name="new_note" placeholder="What the draft missed" /></div>
           </div>
         </div>
-
-        {% if result.driver_groups %}
-        <div class="section-head"><h2>Cross-section drivers</h2><span>One weakness · several sections · computed, no model call</span></div>
-        {% for group in result.driver_groups %}
-        <div class="driver-group">
-          <div class="driver-head"><span class="slug">{{ group.driver }}</span><span class="badge-across">{{ group.section_count }} sections</span></div>
-          <ul>{% for hit in group.hits %}<li><strong>{{ hit.section.value }}</strong> — <span class="mono">{{ hit.factor_name }}</span> <span class="severity {{ hit.severity.value }}">{{ hit.severity.value }}</span></li>{% endfor %}</ul>
-        </div>
-        {% endfor %}
-        {% endif %}
 
         {% if result.referrals or result.dropped %}
         <div class="section-head"><h2>Decision referrals</h2><span>Explicit human attention required</span></div>

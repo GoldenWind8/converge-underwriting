@@ -30,18 +30,15 @@ raw input ─▶ PROFILE ─▶ NEEDS DETERMINATION ─▶ GATE 1: confirm secti
   broker needs analysis PDF) is classified required / consider / not-applicable, with
   a one-line reason and a Motor sub-type where Motor is in play. The underwriter
   confirms the table (gate 1); what it says *required* is what gets assessed.
-- **Assess** — one focused model call per confirmed section. The LLM proposes its own
+- **Assess** — one focused model call per confirmed section, run concurrently so a
+  submission takes about as long as its slowest section. The LLM proposes its own
   risk factors, informed by the section-tagged playbook rules and the comparable
-  approved cases for that section. Every finding must quote verbatim evidence and
-  carry driver slugs naming the underlying weakness.
+  approved cases for that section. Every finding must quote verbatim evidence.
 - **Guardrails** — deterministic: hallucinated or insubstantial evidence is dropped,
   unverifiable citations are removed, the referral band is derived from the severity
   profile, and severe / novel / low-confidence findings are referred to a human.
   There is deliberately **no numeric score and no pricing anywhere** — severity is a
   standardised categorical scale (low / medium / high / severe).
-- **Driver roll-up** — one weakness surfacing under several sections is grouped and
-  shown; a driver undermining 3+ sections at medium-or-above is itself a referral.
-  Computed, no model call.
 - **Human review** — a split-screen decision workspace (gate 2) links each finding to
   its source evidence, recomputes the band live, and captures the reviewer's own
   "why" note verbatim on every edit. Only approved cases ever enter memory.
@@ -100,16 +97,15 @@ python -m app.evaluate  # memory-on vs memory-off comparison (needs an LLM + sto
 ```
 app/
   llm.py           swappable LLM layer (gemini | anthropic | claude-cli) — the only vendor code
-  sections.py      the 18 cover sections (PDF-verified), Motor sub-types, driver vocabulary
+  sections.py      the 18 cover sections (PDF-verified), Motor sub-types
   models.py        RiskFinding, SectionNeed, CaseRecord, … (Pydantic)
   needs.py         needs determination (which sections apply) — human gate 1 feeds on this
   assess.py        per-section assessment (prompt = section scope + rules + precedents + document)
   guardrails.py    deterministic evidence check, severity band, referrals
-  drivers.py       cross-section driver roll-up (no model)
   memory.py        SQLite case store, retrieval, section-tagged playbook + reflection
   main.py          FastAPI routes;  report.py + templates/  rendering
   ingest_chats.py  seed memory (provisional) from historical chats;  evaluate.py  eval harness
 data/              cases.db, playbook.md, playbook_history/  (safe to delete)
 sample_data/       example application + synthetic historical chats
-tests/             sections, needs, guardrails, drivers, memory, learning loop (LLM faked — offline)
+tests/             sections, needs, guardrails, memory, learning loop (LLM faked — offline)
 ```

@@ -94,19 +94,6 @@ def test_low_confidence_triggers_referral():
     assert any("Low-confidence" in r for r in result.referrals)
 
 
-def test_cross_section_driver_triggers_referral():
-    shared = dict(evidence_quote="Vehicles parked on the street overnight",
-                  drivers=["unsecured-overnight-parking"], severity=Severity.medium)
-    result = apply(_draft(
-        _finding(factor_name="a", section=SectionId.motor, **shared),
-        _finding(factor_name="b", section=SectionId.theft, **shared),
-        _finding(factor_name="c", section=SectionId.goods_in_transit, **shared),
-    ), DOC)
-    assert result.driver_groups[0].driver == "unsecured-overnight-parking"
-    assert result.driver_groups[0].section_count == 3
-    assert any("unsecured-overnight-parking" in r for r in result.referrals)
-
-
 def test_findings_sorted_by_section_order_then_severity():
     result = apply(_draft(
         _finding(factor_name="motor_low", section=SectionId.motor, severity=Severity.low,

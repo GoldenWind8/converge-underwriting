@@ -1,5 +1,4 @@
 from app.guardrails import GuardrailResult
-from app.drivers import group_drivers
 from app.memory import LearningProposal
 from app.models import (CaseRecord, ClientProfile, Correction,
                         NeedsDetermination, Requirement, RiskAssessmentDraft,
@@ -19,7 +18,6 @@ FINDING = RiskFinding(
     assessment_note="Below standard for a food-production occupancy.",
     evidence_quote="Gas certificate: Missing",
     reasoning="The installation has no current certificate.",
-    drivers=["hot-work-on-site"],
     precedent_case_ids=["C-0001"], playbook_rule_ids=["PB-001"], confidence=.93,
 )
 NEEDS = _repair([SectionNeed(section=SectionId.fire, requirement=Requirement.required,
@@ -38,13 +36,12 @@ def test_needs_page_renders_all_sections_and_gate_one_controls():
     assert "A restaurant." in html
 
 
-def test_review_workspace_renders_sections_drivers_and_why_note():
+def test_review_workspace_renders_sections_and_why_note():
     second = FINDING.model_copy(update={
         "factor_name": "gas_bi_dependency", "section": SectionId.business_interruption,
     })
     draft = RiskAssessmentDraft(client_profile=PROFILE, findings=[FINDING, second])
-    result = GuardrailResult(findings=[FINDING, second], band="Elevated",
-                             driver_groups=group_drivers([FINDING, second]))
+    result = GuardrailResult(findings=[FINDING, second], band="Elevated")
 
     html = render_review(
         "draft-1", draft, result, "fake", "2026-08-07 10:00",
@@ -59,19 +56,18 @@ def test_review_workspace_renders_sections_drivers_and_why_note():
     assert 'href="/playbook#PB-001"' in html
     assert 'name="new_evidence_quote"' in html
     assert 'name="note_0"' in html, "the why-note input must be on every finding"
-    assert "hot-work-on-site" in html, "cross-section driver panel"
     assert "3 model call(s)" in html
     assert "points" not in html.lower(), "no score anywhere on the review surface"
 
 
-def test_report_renders_needs_rationale_drivers_and_reviewer_notes():
+def test_report_renders_needs_rationale_and_reviewer_notes():
     case = CaseRecord(
         case_id="C-0002", created_at="2026-08-07T10:00:00", source="assessment",
         client_profile=PROFILE, summary=PROFILE.summary, needs=NEEDS,
         draft_findings=[FINDING], approved_findings=[FINDING],
         corrections=[Correction(type="severity_changed", factor_name="uncertified_gas",
                                 detail="medium -> high", note="Certificates are non-negotiable.")],
-        driver_groups=[], final_band="Elevated",
+        final_band="Elevated",
     )
     proposal = LearningProposal(
         case_id=case.case_id, current_playbook="# Underwriting Playbook\n",

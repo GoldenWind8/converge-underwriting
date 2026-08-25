@@ -240,7 +240,6 @@ def propose_reflection(case: CaseRecord) -> Optional[LearningProposal]:
     ) or "(none — approved as drafted)"
     approved = "\n".join(
         f"- {f.factor_name} [{f.section.value}] severity={f.severity.value}"
-        + (f" drivers={', '.join(f.drivers)}" if f.drivers else "")
         + f": {f.reasoning}"
         for f in case.approved_findings
     ) or "(no findings)"

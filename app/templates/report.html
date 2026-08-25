@@ -28,9 +28,6 @@
   .approved-top { display:flex; justify-content:space-between; gap:12px; }.approved-title { margin-bottom:4px; font-weight:700; }
   .assessment-note { color:var(--muted); font-size:11px; font-style:italic; }
   .evidence-line { margin:10px 0; padding:9px 11px; color:#3d466f; border-left:3px solid #899bf7; background:#f2f3ff; font:11px/1.55 'IBM Plex Mono',monospace; }
-  .driver-chip { display:inline-flex; padding:3px 8px; border-radius:999px; border:1px dashed #a9b5c9; background:#f6f8fa; color:#4e6475; font:10px 'IBM Plex Mono',monospace; }
-  .driver-appendix { padding:12px 14px; border:1px solid var(--line-soft); border-radius:10px; background:#fafcfd; margin-bottom:9px; }
-  .driver-appendix ul { margin:6px 0 0; padding-left:18px; font-size:12px; color:#40596b; }
   .side-stack { display:grid; gap:14px; position:sticky; top:86px; }.side-card { padding:18px; }.side-card h3 { margin-bottom:12px; }
   .audit-item { display:flex; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--line-soft); font-size:11px; }.audit-item:last-child{border:0}.audit-item span:first-child{color:var(--muted)}
   .learning { margin-top:20px; overflow:hidden; border:1px solid #d7c48f; background:#fffdf7; }
@@ -58,12 +55,8 @@
         <h2 class="section-title">Approved risk factors</h2>
         {% for group in groups %}
         <div class="cover-banner">{{ group.cover.number }}. {{ group.cover.name }}</div>
-        {% for index, f in group["items"] %}<div class="approved-finding"><div class="approved-top"><div><div class="approved-title"><span class="mono">{{ f.factor_name }}</span></div><span class="severity {{ f.severity.value }}">{{ f.severity.value }} severity</span>{% if f.assessment_note %}<div class="assessment-note">{{ f.assessment_note }}</div>{% endif %}</div></div><p style="margin:8px 0">{{ f.reasoning }}</p><div class="evidence-line">“{{ f.evidence_quote }}”</div><div class="page-actions">{% for d in f.drivers %}<span class="driver-chip">{{ d }}</span>{% endfor %}{% for cid in f.precedent_case_ids %}<a class="audit-chip" href="/cases/{{ cid }}">↗ {{ cid }}</a>{% endfor %}{% for rid in f.playbook_rule_ids %}<a class="audit-chip" href="/playbook#{{ rid }}">§ {{ rid }}</a>{% endfor %}{% if not f.precedent_case_ids and not f.playbook_rule_ids %}<span class="pill">Reviewer-validated novel finding</span>{% endif %}</div></div>{% endfor %}
+        {% for index, f in group["items"] %}<div class="approved-finding"><div class="approved-top"><div><div class="approved-title"><span class="mono">{{ f.factor_name }}</span></div><span class="severity {{ f.severity.value }}">{{ f.severity.value }} severity</span>{% if f.assessment_note %}<div class="assessment-note">{{ f.assessment_note }}</div>{% endif %}</div></div><p style="margin:8px 0">{{ f.reasoning }}</p><div class="evidence-line">“{{ f.evidence_quote }}”</div><div class="page-actions">{% for cid in f.precedent_case_ids %}<a class="audit-chip" href="/cases/{{ cid }}">↗ {{ cid }}</a>{% endfor %}{% for rid in f.playbook_rule_ids %}<a class="audit-chip" href="/playbook#{{ rid }}">§ {{ rid }}</a>{% endfor %}{% if not f.precedent_case_ids and not f.playbook_rule_ids %}<span class="pill">Reviewer-validated novel finding</span>{% endif %}</div></div>{% endfor %}
         {% else %}<div class="empty">No risk factors were approved.</div>{% endfor %}
-        {% if case.driver_groups %}
-        <h2 class="section-title">Driver appendix · weaknesses crossing sections</h2>
-        {% for group in case.driver_groups %}<div class="driver-appendix"><strong class="mono">{{ group.driver }}</strong> <span class="pill">{{ group.section_count }} sections</span><ul>{% for hit in group.hits %}<li><strong>{{ hit.section.value }}</strong> — <span class="mono">{{ hit.factor_name }}</span> <span class="severity {{ hit.severity.value }}">{{ hit.severity.value }}</span></li>{% endfor %}</ul></div>{% endfor %}
-        {% endif %}
         {% if case.corrections %}<h2 class="section-title">Reviewer changes</h2>{% for c in case.corrections %}<div class="correction"><span class="pill">{{ c.type|replace('_',' ') }}</span> <span class="mono">{{ c.factor_name }}</span> {% if c.detail %}· {{ c.detail }}{% endif %}{% if c.note %}<span class="note">“{{ c.note }}”</span>{% endif %}</div>{% endfor %}{% endif %}
       </div>
     </article>
