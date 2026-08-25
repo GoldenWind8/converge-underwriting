@@ -13,8 +13,8 @@ No LLM here — an underwriter can reproduce everything in this file by hand.
      the model are removed and referred.
   3. Band mapping — the severity profile -> referral band. Categorical only;
      there is deliberately no score anywhere in this system.
-  4. Referral triggers — low confidence, novel findings, severe findings, and
-     one driver undermining three or more sections go to a human.
+  4. Referral triggers — low confidence, novel findings, and severe findings
+     go to a human.
 """
 
 from __future__ import annotations
@@ -23,9 +23,8 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Tuple
 
-from .drivers import REFERRAL_SECTION_COUNT, group_drivers, referral_drivers
-from .models import (SEVERITY_ORDER, DriverGroup, RiskAssessmentDraft,
-                     RiskFinding, Severity)
+from .models import (SEVERITY_ORDER, RiskAssessmentDraft, RiskFinding,
+                     Severity)
 from .sections import section
 
 CONFIDENCE_FLOOR = 0.6
@@ -56,7 +55,6 @@ class GuardrailResult:
     band: str = "Low"
     referrals: List[str] = field(default_factory=list)
     invalid_citations: List[str] = field(default_factory=list)
-    driver_groups: List[DriverGroup] = field(default_factory=list)
 
 
 def band_for_findings(findings: List[RiskFinding]) -> str:
@@ -127,7 +125,6 @@ def apply(draft: RiskAssessmentDraft, raw_text: str) -> GuardrailResult:
     # Section order first (as the needs analysis lists them), worst first within.
     result.findings.sort(key=lambda f: (section(f.section).number, -SEVERITY_ORDER[f.severity]))
     result.band = band_for_findings(result.findings)
-    result.driver_groups = group_drivers(result.findings)
 
     severe = [f.factor_name for f in result.findings if f.severity == Severity.severe]
     if severe:
@@ -153,12 +150,6 @@ def apply(draft: RiskAssessmentDraft, raw_text: str) -> GuardrailResult:
         result.referrals.append(
             "Unverified audit citation(s) were removed — human review required: "
             + "; ".join(result.invalid_citations) + "."
-        )
-
-    for group in referral_drivers(result.driver_groups):
-        result.referrals.append(
-            f"Driver '{group.driver}' undermines {group.section_count} cover sections "
-            f"at medium severity or above (threshold {REFERRAL_SECTION_COUNT}) — human review required."
         )
 
     if result.dropped:

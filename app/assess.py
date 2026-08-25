@@ -8,9 +8,9 @@ docs/CONSOLIDATION_PLAN.md OPEN-B).
      with the section-filtered playbook in the system prompt and the
      section-filtered precedents + raw document in the user message.
 
-Sections are assessed in the needs-analysis order, and each call is told which
-driver slugs earlier sections already used, so one weakness keeps one name
-across the whole submission.
+The section calls are independent, so they run concurrently; findings are
+reassembled in the needs-analysis order. One failed section fails the whole
+assessment — no partial drafts.
 
 The LLM decides its own risk factors; guardrails.py verifies them afterwards.
 """
@@ -18,14 +18,14 @@ The LLM decides its own risk factors; guardrails.py verifies them afterwards.
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple
 
 from . import llm, memory
 from .models import (CaseRecord, ClientProfile, Requirement,
                      RiskAssessmentDraft, SectionAssessment, SectionNeed)
 from .needs import NO_PRICING
-from .sections import (DRIVER_VOCABULARY, MOTOR_SUB_TYPE_NOTES, SectionId,
-                       section)
+from .sections import MOTOR_SUB_TYPE_NOTES, SectionId, section
 
 PROFILE_SYSTEM = (
     "Extract a slim client profile from this commercial-insurance application. "
@@ -39,7 +39,7 @@ SECTION_SYSTEM = """You are the risk-assessment engine inside Converge Underwrit
 Cover section under assessment: {number}. {name}
 What this section covers: {scope}
 {context_lines}
-Assess this section and only this section. The other sections are being assessed separately, so do not range across the whole submission: a fact matters here only insofar as it bears on {name}. Where the same underlying weakness also affects other sections, name it in the drivers field and leave those sections to their own assessment.
+Assess this section and only this section. The other sections are being assessed separately, so do not range across the whole submission: a fact matters here only insofar as it bears on {name}. Where the same underlying weakness also affects other sections, leave those sections to their own assessment.
 
 Propose the risk findings that matter for this section - typically three to six. For each finding:
 - factor_name: short snake_case, e.g. 'uncertified_gas_installation'.
@@ -47,18 +47,10 @@ Propose the risk findings that matter for this section - typically three to six.
 - assessment_note: one line naming the reference class the judgement was made against, e.g. 'below standard for a food-production occupancy'. Narrative only — never a number.
 - evidence_quote: VERBATIM text copied from the submission. Findings whose quote does not appear in the document, or whose quote is a short generic fragment like 'Yes', are discarded by a deterministic guardrail — never paraphrase, and quote the whole relevant line.
 - reasoning: one or two sentences. Why this level for this client.
-- drivers: one to three slugs, as described below.
 - precedent_case_ids / playbook_rule_ids: cite the precedent cases and playbook rules that informed the finding. Leave both empty only if it is genuinely novel.
 - confidence: 0-1; below 0.6 triggers a human referral.
 
 Cover distinct dimensions of this section's risk rather than restating one dimension several ways. Prefer what this specific submission makes salient over a generic checklist.
-
-Driver slugs. Each finding carries one to three short kebab-case slugs naming the underlying fact about the business that drives it - not the factor restated, but the thing about this client that causes it. One weakness surfacing under several cover sections at once is exactly what an underwriter needs to see, and that only works if you name it identically each time.
-
-Prefer these:
-{driver_vocabulary}
-{known_drivers_block}
-Only coin a new slug when nothing above fits, and then keep it general enough that another section could reuse it. Never invent a slug per finding.
 
 {no_pricing}
 
@@ -79,9 +71,10 @@ def assess_sections(
     use_memory: bool = True,
 ) -> Tuple[RiskAssessmentDraft, str]:
     """Assess every section the confirmed needs table marks required — one
-    main-model call each, in the needs-analysis order. Returns (draft, engine);
-    engine is the provider name, disclosed on the report.
-    use_memory=False is for the eval harness (blind baseline)."""
+    main-model call each, run concurrently, findings reassembled in the
+    needs-analysis order. Returns (draft, engine); engine is the provider name,
+    disclosed on the report. use_memory=False is for the eval harness (blind
+    baseline)."""
     precedents = memory.retrieve(profile, k=5) if use_memory else []
     playbook = memory.load_playbook() if use_memory else memory.PLAYBOOK_STUB
 
@@ -91,16 +84,17 @@ def assess_sections(
     )
 
     draft = RiskAssessmentDraft(client_profile=profile)
-    known_drivers: List[str] = []
-    for need in required:
-        sa = _assess_one_section(raw_text, need, playbook, precedents, known_drivers)
-        for f in sa.findings:
-            draft.findings.append(f.model_copy(update={"section": need.section}))
-            for slug in f.drivers:
-                if slug not in known_drivers:
-                    known_drivers.append(slug)
-        if sa.memory_note:
-            draft.overall_notes.append(f"{section(need.section).name}: {sa.memory_note}")
+    if required:
+        with ThreadPoolExecutor(max_workers=len(required)) as pool:
+            assessments = list(pool.map(
+                lambda need: _assess_one_section(raw_text, need, playbook, precedents),
+                required,
+            ))
+        for need, sa in zip(required, assessments):
+            for f in sa.findings:
+                draft.findings.append(f.model_copy(update={"section": need.section}))
+            if sa.memory_note:
+                draft.overall_notes.append(f"{section(need.section).name}: {sa.memory_note}")
 
     # Keep an unforgeable runtime allow-list for the deterministic citation guardrail.
     draft._retrieved_case_ids = {c.case_id for c in precedents}
@@ -113,7 +107,6 @@ def _assess_one_section(
     need: SectionNeed,
     playbook: str,
     precedents: List[CaseRecord],
-    known_drivers: List[str],
 ) -> SectionAssessment:
     cover = section(need.section)
 
@@ -127,21 +120,11 @@ def _assess_one_section(
             "own-damage exposure is not worth assessing under third-party-only cover.\n"
         )
 
-    known_drivers_block = ""
-    if known_drivers:
-        known_drivers_block = (
-            "\nAlready used on other sections of this same submission - reuse these "
-            "verbatim wherever they apply rather than coining a variant:\n"
-            + "\n".join(f"  {d}" for d in known_drivers) + "\n"
-        )
-
     system = SECTION_SYSTEM.format(
         number=cover.number,
         name=cover.name,
         scope=cover.scope,
         context_lines=context_lines,
-        driver_vocabulary="\n".join(f"  {d}" for d in DRIVER_VOCABULARY),
-        known_drivers_block=known_drivers_block,
         no_pricing=NO_PRICING,
         playbook=memory.rules_for_section(playbook, need.section),
     )

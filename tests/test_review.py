@@ -53,7 +53,6 @@ def test_reviewer_added_finding_keeps_verbatim_evidence_and_section():
         ("new_section", "fire"), ("new_severity", "medium"),
         ("new_reasoning", "Certification is absent."),
         ("new_evidence_quote", "Gas certificate: Missing since the refit"),
-        ("new_drivers", "hot-work-on-site, no fire detection"),
     ])
 
     approved, corrections = _apply_review(form, [_finding()], RAW)
@@ -62,7 +61,6 @@ def test_reviewer_added_finding_keeps_verbatim_evidence_and_section():
     assert added.factor_name == "missing_gas_certificate"
     assert added.section == SectionId.fire
     assert added.evidence_quote == "Gas certificate: Missing since the refit"
-    assert added.drivers == ["hot-work-on-site", "no-fire-detection"]
     assert corrections[-1].type == "added"
 
 

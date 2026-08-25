@@ -1,6 +1,6 @@
 """The whole pipeline through the HTTP layer: submit -> needs table (gate 1)
--> per-section assessment -> review (gate 2) -> approved case with needs,
-drivers and a severity-derived band."""
+-> per-section assessment -> review (gate 2) -> approved case with needs and
+a severity-derived band."""
 
 import os
 import re
@@ -38,7 +38,6 @@ def _finding(**overrides):
         factor_name="no_fire_detection", section=SectionId.fire, severity=Severity.high,
         evidence_quote="no sprinklers, no fire detection",
         reasoning="Combustible stock with no detection.", confidence=0.9,
-        drivers=["no-fire-detection"],
     )
     base.update(overrides)
     return RiskFinding(**base)

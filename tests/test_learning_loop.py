@@ -2,6 +2,7 @@
 guardrails -> approve -> reflect -> the next assessment's prompt contains what
 was learned, scoped to the right section."""
 
+import threading
 from pathlib import Path
 
 from app import guardrails, memory
@@ -34,7 +35,6 @@ def _finding(**overrides) -> RiskFinding:
         severity=Severity.medium,
         evidence_quote="no gas certificate of conformity on file",
         reasoning="Uncertified gas installation after a refit.", confidence=0.9,
-        drivers=["hot-work-on-site"],
     )
     base.update(overrides)
     return RiskFinding(**base)
@@ -57,6 +57,20 @@ def test_one_call_per_required_section_and_guardrails_drop_hallucinations(fake_l
     assert dropped_names == {"asbestos_roof"}  # the invented quote, in both sections
 
 
+def test_section_calls_run_concurrently(fake_llm):
+    # Each call blocks until the other arrives — passes only if both sections
+    # are genuinely in flight at the same time.
+    barrier = threading.Barrier(2, timeout=5)
+
+    def respond(system, user):
+        barrier.wait()
+        return SectionAssessment(findings=[_finding()])
+
+    fake_llm.register(SectionAssessment, respond)
+    draft, _ = assess_sections(RAW, PROFILE, [_need(SectionId.fire), _need(SectionId.motor)])
+    assert {f.section for f in draft.findings} == {SectionId.fire, SectionId.motor}
+
+
 def test_consider_and_not_applicable_sections_are_not_assessed(fake_llm):
     fake_llm.register(SectionAssessment, SectionAssessment(findings=[_finding()]))
     needs = [
@@ -66,16 +80,6 @@ def test_consider_and_not_applicable_sections_are_not_assessed(fake_llm):
     ]
     assess_sections(RAW, PROFILE, needs)
     assert len([c for c in fake_llm.calls if c[0] == "SectionAssessment"]) == 1
-
-
-def test_later_sections_see_driver_slugs_from_earlier_sections(fake_llm):
-    fake_llm.register(SectionAssessment, SectionAssessment(findings=[_finding()]))
-    assess_sections(RAW, PROFILE, [_need(SectionId.fire), _need(SectionId.motor)])
-    fire_system = [c[2] for c in fake_llm.calls if c[0] == "SectionAssessment"][0]
-    motor_system = [c[2] for c in fake_llm.calls if c[0] == "SectionAssessment"][1]
-    assert "Already used on other sections" not in fire_system
-    assert "Already used on other sections" in motor_system
-    assert "hot-work-on-site" in motor_system
 
 
 def test_correction_reaches_the_next_assessment_prompt_for_its_section(fake_llm):

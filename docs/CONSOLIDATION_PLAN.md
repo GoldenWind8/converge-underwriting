@@ -1,6 +1,11 @@
 # Consolidation Plan - merging the two builds of Converge Underwriting
 
-**Status:** Proposed, 2026-08-07. Not started. No application code has been changed.
+**Status:** Proposed, 2026-08-07. Implemented in commit 33c2845.
+**Amended 2026-08-26:** driver slugs, the driver roll-up (step 6) and its referral trigger have
+been removed - the product's value is the per-section assessment and suggested rating, and the
+reviewer sees all sections together anyway. With no driver chaining between sections, the
+per-section assessment calls (step 4) now run concurrently; a submission takes about as long as
+its slowest section. Everything below that mentions drivers is history, not the current design.
 **Decision needed:** the captain's review of this document, plus the three open decisions in §6.
 **Scope:** how the two parallel builds of this product become one. It does not change the
 design already implemented here - see [SOLUTION_DESIGN.md](SOLUTION_DESIGN.md) for that, and

@@ -10,11 +10,9 @@ The flow's shapes, in pipeline order:
 - RiskFinding                        one risk factor the LLM proposes within a
                                      section. Free about *content*, on rails
                                      about *shape*: verbatim evidence, a
-                                     standardised severity, driver slugs.
+                                     standardised severity.
 - RiskAssessmentDraft                what an assessment run produces, before
                                      human review (gate 2).
-- DriverGroup                        one underlying weakness surfacing under
-                                     two or more sections — computed, no model.
 - CaseRecord                         one approved case, the unit of memory.
                                      Only records a human signed off ever
                                      become non-provisional CaseRecords.
@@ -30,9 +28,9 @@ from __future__ import annotations
 from enum import Enum
 from typing import List, Literal, Optional, Set
 
-from pydantic import BaseModel, Field, PrivateAttr, field_validator
+from pydantic import BaseModel, Field, PrivateAttr
 
-from .sections import MotorSubType, SectionId, normalise_slugs
+from .sections import MotorSubType, SectionId
 
 
 class Severity(str, Enum):
@@ -83,15 +81,9 @@ class RiskFinding(BaseModel):
     assessment_note: str = Field("", description="One line naming the reference class the judgement was made against, e.g. 'below standard for a food-production occupancy'. Narrative only — never a number.")
     evidence_quote: str = Field(..., description="Verbatim text copied from the source document that evidences this risk.")
     reasoning: str = Field(..., description="Why this is a risk for this client.")
-    drivers: List[str] = Field(default_factory=list, description="One to three kebab-case slugs naming the underlying facts about the business that drive this finding.")
     precedent_case_ids: List[str] = Field(default_factory=list, description="IDs of retrieved past cases that informed this finding. Empty = novel.")
     playbook_rule_ids: List[str] = Field(default_factory=list, description="IDs of playbook rules (PB-xxx) that informed this finding.")
     confidence: float = Field(0.5, description="0-1. Low confidence forces a human referral.")
-
-    @field_validator("drivers", mode="before")
-    @classmethod
-    def _normalise_drivers(cls, value):
-        return normalise_slugs(value)
 
 
 class SectionAssessment(BaseModel):
@@ -110,19 +102,6 @@ class RiskAssessmentDraft(BaseModel):
     # These are deliberately excluded from the model schema and persisted record.
     _retrieved_case_ids: Optional[Set[str]] = PrivateAttr(default=None)
     _available_rule_ids: Optional[Set[str]] = PrivateAttr(default=None)
-
-
-class DriverGroup(BaseModel):
-    """One underlying weakness surfacing under two or more sections."""
-
-    class Hit(BaseModel):
-        section: SectionId
-        factor_name: str
-        severity: Severity
-
-    driver: str
-    hits: List[Hit] = Field(default_factory=list)
-    section_count: int = 0
 
 
 class Correction(BaseModel):
@@ -144,7 +123,6 @@ class CaseRecord(BaseModel):
     draft_findings: List[RiskFinding] = Field(default_factory=list)
     approved_findings: List[RiskFinding] = Field(default_factory=list)
     corrections: List[Correction] = Field(default_factory=list)
-    driver_groups: List[DriverGroup] = Field(default_factory=list)
     final_band: str = "Low"
     # Chat-ingested cases stay provisional — invisible to retrieval — until a
     # human confirms them (docs/CONSOLIDATION_PLAN.md §7.3).
