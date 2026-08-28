@@ -11,8 +11,7 @@ Provider is chosen once, from the environment:
 
 The claude-cli route runs on whatever Claude Code login the machine already
 has — no service credential. It exists so prompts can be iterated on locally
-before any key is authorised (docs/CONSOLIDATION_PLAN.md §9). It is not a
-production route.
+before any key is authorised. It is not a production route.
 
 An LLM is required — main.py and the CLI tools call require() at startup so a
 missing provider fails immediately with a clear message, not halfway through a

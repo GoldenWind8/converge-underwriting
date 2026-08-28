@@ -146,7 +146,7 @@ def test_ingest_stores_a_provisional_case_and_never_touches_the_playbook(fake_ll
     assert case.provisional, "ingested cases must wait for human confirmation"
     assert case.final_band == "Elevated"
     assert memory.get_case(case.case_id) is not None
-    assert memory.load_playbook() == playbook_before, "§7.3: no ungated playbook write"
+    assert memory.load_playbook() == playbook_before, "SOLUTION_DESIGN §4.4: no ungated playbook write"
 
 
 def test_ingest_skips_chats_without_decisions(fake_llm):

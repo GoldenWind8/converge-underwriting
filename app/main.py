@@ -11,6 +11,7 @@ The loop (three human gates):
                         reflection proposes a playbook update
   POST /learning/{id}   GATE 3: accept / edit / skip the playbook update
   GET  /cases           browse memory;  GET /cases/{id} re-renders a stored report
+  GET  /cases/{id}/pdf  client-facing PDF copy of a stored case (HTML -> xhtml2pdf)
   GET  /playbook        the current playbook
 
 Drafts awaiting a gate are held in memory (PENDING_NEEDS, DRAFTS) — fine for a
@@ -26,7 +27,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import guardrails, llm, memory
@@ -34,6 +35,7 @@ from .assess import assess_profile, assess_sections
 from .models import (CaseRecord, Correction, Requirement, RiskFinding,
                      SectionNeed, Severity)
 from .needs import determine_needs
+from .pdf import case_pdf, pdf_filename
 from .report import (render_cases, render_error, render_index, render_needs,
                      render_playbook, render_report, render_review)
 from .sections import MotorSubType, SectionId, section
@@ -303,9 +305,21 @@ def case_detail(case_id: str) -> HTMLResponse:
     return HTMLResponse(render_report(case, "stored", _now()))
 
 
+@app.get("/cases/{case_id}/pdf")
+def case_pdf_download(case_id: str) -> Response:
+    case = memory.get_case(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+    return Response(
+        content=case_pdf(case, _now()),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{pdf_filename(case)}"'},
+    )
+
+
 @app.post("/cases/{case_id}/confirm")
 def confirm_ingested_case(case_id: str) -> RedirectResponse:
-    """Human confirmation of a provisional (chat-ingested) case — §7.3 gate."""
+    """Human confirmation of a provisional (chat-ingested) case — docs/SOLUTION_DESIGN.md §4.4."""
     if memory.confirm_case(case_id) is None:
         raise HTTPException(status_code=404, detail="Case not found.")
     return RedirectResponse(url="/cases", status_code=303)

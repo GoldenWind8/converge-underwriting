@@ -3,6 +3,7 @@ uvicorn[standard]>=0.30
 jinja2>=3.1
 pydantic>=2.7
 python-multipart>=0.0.9
+xhtml2pdf>=0.2.16
 # LLM providers — install the one you use (an LLM is required to run)
 google-genai>=1.0
 anthropic>=0.40

@@ -85,7 +85,7 @@ def active_cases() -> List[CaseRecord]:
 
 
 def confirm_case(case_id: str) -> Optional[CaseRecord]:
-    """Human confirmation of a provisional (ingested) case — the §7.3 gate."""
+    """Human confirmation of a provisional (ingested) case — docs/SOLUTION_DESIGN.md §4.4."""
     case = get_case(case_id)
     if case is None or not case.provisional:
         return case

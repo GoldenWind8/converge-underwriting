@@ -7,7 +7,7 @@ Per transcript: an LLM extracts the client profile and the risks the human
 underwriter actually decided on -> stored as a PROVISIONAL CaseRecord
 (source="chat_ingestion"). Transcripts with no risk decision are skipped.
 
-Governance (docs/CONSOLIDATION_PLAN.md §7.3): LLM-extracted cases never enter
+Governance (docs/SOLUTION_DESIGN.md §4.4): LLM-extracted cases never enter
 the live memory ungated. They are stored provisional — invisible to retrieval —
 until a human confirms each one on the /cases page, and ingestion never writes
 to the playbook.

@@ -18,10 +18,10 @@ raw input ─▶ PROFILE ─▶ NEEDS DETERMINATION ─▶ GATE 1: confirm secti
                               (18 sections)          │
              ┌───────────────────────────────────────┘
              ▼
-        ASSESS (one call per required section) ─▶ GUARDRAILS ─▶ DRIVER ROLL-UP
+        ASSESS (one call per required section) ─▶ GUARDRAILS ─▶ GATE 2: human review
              ▲  ▲                                 (deterministic)      │
              │  └── playbook.md (section-tagged rules)                 ▼
-             └───── similar past cases ◀── case memory ◀── GATE 2: human review
+             └───── similar past cases ◀── case memory ◀── approved case ─▶ report / PDF
                                                │
                                                └─▶ REFLECT ─▶ GATE 3: accept/edit/skip ─▶ playbook.md
 ```
@@ -38,7 +38,8 @@ raw input ─▶ PROFILE ─▶ NEEDS DETERMINATION ─▶ GATE 1: confirm secti
   unverifiable citations are removed, the referral band is derived from the severity
   profile, and severe / novel / low-confidence findings are referred to a human.
   There is deliberately **no numeric score and no pricing anywhere** — severity is a
-  standardised categorical scale (low / medium / high / severe).
+  standardised categorical scale (low / medium / high / severe). The exact rules are
+  in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#what-guards-what).
 - **Human review** — a split-screen decision workspace (gate 2) links each finding to
   its source evidence, recomputes the band live, and captures the reviewer's own
   "why" note verbatim on every edit. Only approved cases ever enter memory.
@@ -47,8 +48,8 @@ raw input ─▶ PROFILE ─▶ NEEDS DETERMINATION ─▶ GATE 1: confirm secti
   becomes active; every previous version is retained in `data/playbook_history/`.
 
 How the pieces link together (with diagrams): **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
-Full design rationale: **[docs/SOLUTION_DESIGN.md](docs/SOLUTION_DESIGN.md)**.
-The consolidation this build implements: **[docs/CONSOLIDATION_PLAN.md](docs/CONSOLIDATION_PLAN.md)**.
+Design rationale and the decisions behind it: **[docs/SOLUTION_DESIGN.md](docs/SOLUTION_DESIGN.md)**.
+Visual identity: **[docs/BRAND.md](docs/BRAND.md)**.
 
 ## Run it
 
@@ -66,10 +67,20 @@ python -m app.ingest_chats        # optional: seed memory from sample historical
 uvicorn app.main:app --reload     # open http://127.0.0.1:8000
 ```
 
-Paste `sample_data/sample_application.md` (or click **Load guided sample**), confirm
-the needs table, review the draft, change a severity and say why, approve the case,
-and accept the proposed playbook lesson. Assess a similar client and watch the next
-finding cite both the precedent case and the newly governed rule.
+Paste `sample_data/sample_application.md` (or click **Load guided sample**), or upload a
+`.txt` / `.md` / `.csv` (250 KB max) — a completed copy of the broker intake sheet in
+`sample_data/` works well. Confirm the needs table, review the draft, change a severity
+and say why, approve the case, and accept the proposed playbook lesson. Assess a similar
+client and watch the next finding cite both the precedent case and the newly governed rule.
+
+Once a case is approved, **Save PDF copy** on the decision page (or `GET /cases/{id}/pdf`)
+downloads a client-facing report: `app/templates/case_pdf.html` rendered and converted with
+xhtml2pdf (pure Python, no browser needed). Internal codes — factor slugs, playbook rule
+ids, precedent ids, confidence, reviewer edits — are left out of it.
+`sample_data/Converge-Underwriting-C-0002-XYZ-Shoes.pdf` is an example of the output.
+
+**Reset** on the case-memory page (`POST /demo/reset`) empties case memory and the
+playbook, keeping the archived playbook versions.
 
 ## Choosing the AI
 
@@ -81,9 +92,12 @@ The vendor lives in one file, `app/llm.py`, picked from the environment:
 | `ANTHROPIC_API_KEY` set | Claude (`claude-opus-4-8` / `claude-haiku-4-5`) |
 | neither, `claude` CLI on PATH | Claude Code CLI on the machine's existing login — keyless, for local prompt iteration only |
 
-`LLM_PROVIDER`, `LLM_MODEL_MAIN`, `LLM_MODEL_FAST` override the defaults.
+`LLM_PROVIDER`, `LLM_MODEL_MAIN`, `LLM_MODEL_FAST` override the defaults; `UW_CLI_TIMEOUT_S`
+(default 240) bounds a CLI call. "Main" handles needs determination, assessment and
+reflection; "fast" handles profile extraction, precedent retrieval and chat ingestion.
 Every call's tokens (and cost, where the provider reports it) are captured and
-shown on the review page.
+shown on the review page. Adding a provider is one `_<name>_generate()` function in
+`app/llm.py`.
 
 ## Test & evaluate
 
@@ -103,9 +117,13 @@ app/
   assess.py        per-section assessment (prompt = section scope + rules + precedents + document)
   guardrails.py    deterministic evidence check, severity band, referrals
   memory.py        SQLite case store, retrieval, section-tagged playbook + reflection
-  main.py          FastAPI routes;  report.py + templates/  rendering
+  main.py          FastAPI routes;  report.py + templates/  HTML rendering
+  pdf.py           client-facing PDF of an approved case (templates/case_pdf.html + xhtml2pdf)
   ingest_chats.py  seed memory (provisional) from historical chats;  evaluate.py  eval harness
-data/              cases.db, playbook.md, playbook_history/  (safe to delete)
-sample_data/       example application + synthetic historical chats
-tests/             sections, needs, guardrails, memory, learning loop (LLM faked — offline)
+data/              cases.db, playbook.md, playbook_history/  (git-ignored; safe to delete)
+sample_data/       example application, blank broker intake sheet (PDF + text), example
+                   PDF output, synthetic historical chats
+tests/             sections, needs, guardrails, memory, flow, review, UI, PDF, learning loop
+                   (LLM faked — offline)
+Needs Analysis.pdf the broker needs analysis that sections.py transcribes
 ```

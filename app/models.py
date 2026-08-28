@@ -1,6 +1,5 @@
 """
-Data model for the self-learning risk assessment (docs/SOLUTION_DESIGN.md §3,
-consolidated per docs/CONSOLIDATION_PLAN.md).
+Data model for the self-learning risk assessment (docs/SOLUTION_DESIGN.md §3).
 
 The flow's shapes, in pipeline order:
 
@@ -125,5 +124,5 @@ class CaseRecord(BaseModel):
     corrections: List[Correction] = Field(default_factory=list)
     final_band: str = "Low"
     # Chat-ingested cases stay provisional — invisible to retrieval — until a
-    # human confirms them (docs/CONSOLIDATION_PLAN.md §7.3).
+    # human confirms them (docs/SOLUTION_DESIGN.md §4.4).
     provisional: bool = False

@@ -1,6 +1,5 @@
 """
-Deterministic guardrails (docs/SOLUTION_DESIGN.md §4.3, reworked per
-docs/CONSOLIDATION_PLAN.md).
+Deterministic guardrails (docs/SOLUTION_DESIGN.md §4.3).
 
 The LLM proposes findings; this module is what keeps the output defensible.
 No LLM here — an underwriter can reproduce everything in this file by hand.

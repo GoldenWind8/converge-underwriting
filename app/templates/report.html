@@ -62,7 +62,7 @@
     </article>
     <aside class="side-stack noprint">
       <div class="card side-card"><h3>Decision assurance</h3><div class="audit-item"><span>Evidence</span><strong>Verified</strong></div><div class="audit-item"><span>Banding</span><strong>Deterministic</strong></div><div class="audit-item"><span>Pricing</span><strong>Out of scope</strong></div><div class="audit-item"><span>Authority</span><strong>Human approved</strong></div><div class="audit-item"><span>Memory status</span><strong style="color:var(--low)">{% if case.provisional %}Provisional{% else %}Active precedent{% endif %}</strong></div></div>
-      <div class="card side-card"><h3>Next action</h3><p class="hint">Assess a comparable applicant to see this decision retrieved as precedent.</p><a class="btn" href="/" style="width:100%">New assessment →</a><a class="btn secondary" href="/cases" style="width:100%;margin-top:8px">View case memory</a></div>
+      <div class="card side-card"><h3>Next action</h3><p class="hint">Assess a comparable applicant to see this decision retrieved as precedent.</p><a class="btn" href="/cases/{{ case.case_id }}/pdf" style="width:100%">Save PDF copy ↓</a><a class="btn secondary" href="/" style="width:100%;margin-top:8px">New assessment →</a><a class="btn secondary" href="/cases" style="width:100%;margin-top:8px">View case memory</a></div>
     </aside>
   </div>
 

@@ -1,6 +1,5 @@
 """
-The assessment step (docs/SOLUTION_DESIGN.md §4.1, per-section per
-docs/CONSOLIDATION_PLAN.md OPEN-B).
+The assessment step (docs/SOLUTION_DESIGN.md §4.1, §6.11).
 
   1. a cheap "fast" call extracts a slim ClientProfile (needed to drive retrieval),
   2. memory.retrieve() finds the k most comparable approved cases,

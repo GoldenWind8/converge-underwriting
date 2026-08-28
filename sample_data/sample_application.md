@@ -1,36 +1,7 @@
-# Commercial Insurance Application — Raw Intake
+Karoo Panelworks (Pty) Ltd, trading as Karoo Panelworks (registration number 2023/447821/07), is a panel beater and spray-painting workshop that has been trading for one and a half years. The business has an annual turnover of R8,200,000 and employs 14 people. It operates as a tenant on a five-year lease from premises at 27 Voortrekker Road, Worcester, Western Cape. The building is of brick wall construction with timber roof trusses and IBR sheeting, making it partly combustible.
 
-Business name: Karoo Panelworks (Pty) Ltd
-Trading name: Karoo Panelworks
-Registration number: 2023/447821/07
-Industry: Panel beater and spray-painting workshop
-Years trading: 1.5
-Annual turnover: R 8,200,000
-Number of employees: 14
-Premises address: 27 Voortrekker Road, Worcester, Western Cape
-Construction type: Brick walls with timber roof trusses and IBR sheeting (partly combustible)
-Occupancy: Tenant (5-year lease)
+The applicant is seeking fire cover. No buildings sum insured is required (R0), as the landlord insures the building, but the requested sums insured are R3,400,000 for plant and machinery, R1,900,000 for stock, and R600,000 for contents. The premises have no fire extinguishers, no sprinkler system, and no fire alarm. Hazardous materials are kept on site, including paint thinners, acetylene and oxygen cylinders, and solvents. The business has one prior fire claim.
 
-## Fire cover: Yes
-Buildings sum insured: R 0 (landlord insures the building)
-Plant and machinery sum insured: R 3,400,000
-Stock sum insured: R 1,900,000
-Contents sum insured: R 600,000
-Fire extinguishers: No
-Sprinkler system: No
-Fire alarm: No
-Hazardous materials: Yes (paint thinners, acetylene and oxygen cylinders, solvents on site)
-Prior fire claims: 1
+Business interruption cover is also requested. The annual gross profit is R3,100,000, with an indemnity period of six months. The business is dependent on a single location, though it has no key supplier dependency.
 
-## Business Interruption cover: Yes
-Annual gross profit: R 3,100,000
-Indemnity period months: 6
-Single location dependency: Yes
-Key supplier dependency: No
-
-## Public Liability cover: Yes
-Limit of indemnity: R 5,000,000
-Public access: Yes (customers drop off and collect vehicles)
-High risk activities: Yes (hot work — welding and grinding daily)
-Uses subcontractors: No
-Prior liability claims: 0
+Finally, public liability cover is sought with a limit of indemnity of R5,000,000. The public has access to the premises, as customers drop off and collect their vehicles, and the business carries out high-risk activities in the form of daily hot work (welding and grinding). No subcontractors are used, and there are no prior liability claims.

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Risk Assessment Report — {{ case.client_profile.business_name or "Unnamed applicant" }}</title>
+<style>
+  /* xhtml2pdf: keep to simple block/table CSS — no flex, no grid. */
+  @page {
+    size: a4 portrait;
+    margin: 20mm 18mm 24mm 18mm;
+    @frame footer { -pdf-frame-content: footer; bottom: 8mm; margin-left: 18mm; margin-right: 18mm; height: 12mm; }
+  }
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #20232d; line-height: 1.45; }
+  h1 { font-size: 22pt; color: #0f1120; margin: 0 0 4pt 0; }
+  h2 { font-size: 13pt; color: #0f1120; margin: 20pt 0 8pt 0; padding-bottom: 4pt; border-bottom: 1px solid #dfe1e8; }
+  h3 { font-size: 11pt; color: #ffffff; background-color: #292c38; padding: 5pt 8pt; margin: 16pt 0 6pt 0; -pdf-keep-with-next: true; }
+  p { margin: 0 0 6pt 0; }
+  .eyebrow { font-size: 8pt; color: #4f6ef7; font-weight: bold; letter-spacing: 1pt; text-transform: uppercase; }
+  .muted { color: #646875; }
+  .small { font-size: 8.5pt; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { vertical-align: top; padding: 5pt 6pt; }
+  th { text-align: left; font-size: 8pt; color: #646875; text-transform: uppercase; background-color: #f5f6f8; border-bottom: 1px solid #dfe1e8; }
+  .meta td { padding: 2pt 0; }
+  .meta .k { width: 32%; color: #646875; font-size: 8.5pt; text-transform: uppercase; }
+  .overview td { width: 33%; text-align: center; padding: 10pt 6pt; border: 1px solid #dfe1e8; background-color: #fafcfd; }
+  .overview td.band { color: #ffffff; }
+  .overview td.band .label { color: #ffffff; }
+  .overview .big { font-size: 18pt; font-weight: bold; color: #0f1120; }
+  .overview .label { font-size: 8pt; color: #646875; text-transform: uppercase; }
+  .band-name { font-size: 18pt; font-weight: bold; }
+  .overview td.band-Low { background-color: #208567; } .overview td.band-Moderate { background-color: #b47913; }
+  .overview td.band-Elevated { background-color: #c65b21; } .overview td.band-High { background-color: #b83c3c; }
+  .needs td { border-bottom: 1px solid #eceef3; font-size: 9.5pt; }
+  .req { font-weight: bold; font-size: 8.5pt; text-transform: uppercase; }
+  .req-required { color: #b83c3c; } .req-consider { color: #b47913; } .req-not-applicable { color: #9093a0; }
+  .finding td { padding: 8pt 0 10pt 0; border-bottom: 1px solid #eceef3; }
+  .finding-title { font-size: 11pt; font-weight: bold; color: #0f1120; }
+  .sev { font-size: 8pt; font-weight: bold; text-transform: uppercase; }
+  .sev-severe { color: #7d1f1f; } .sev-high { color: #b83c3c; } .sev-medium { color: #c65b21; } .sev-low { color: #b47913; }
+  .note { font-size: 9pt; color: #646875; font-style: italic; }
+  .evidence { margin: 5pt 0 0 0; padding: 5pt 8pt; background-color: #f2f3ff; border-left: 3px solid #899bf7; font-size: 9pt; color: #3d466f; }
+  .disclaimer { margin-top: 18pt; padding: 8pt 10pt; background-color: #f5f6f8; border: 1px solid #dfe1e8; font-size: 8.5pt; color: #646875; }
+  #footer { font-size: 8pt; color: #8292a0; text-align: center; }
+</style>
+</head>
+<body>
+
+<div id="footer">
+  Converge Underwriting · Risk assessment report · {{ case.case_id }} · Page <pdf:pagenumber /> of <pdf:pagecount />
+</div>
+
+{% if logo_path %}<img src="{{ logo_path }}" width="180" alt="Converge Underwriting" /><br /><br />{% endif %}
+
+<div class="eyebrow">Commercial risk assessment</div>
+<h1>{{ case.client_profile.business_name or "Unnamed applicant" }}</h1>
+<p class="muted">{{ case.client_profile.industry or "Industry not stated" }}</p>
+
+<table class="meta">
+  <tr><td class="k">Reference</td><td>{{ case.case_id }}</td></tr>
+  <tr><td class="k">Assessment date</td><td>{{ case.created_at[:10] }}</td></tr>
+  <tr><td class="k">Report generated</td><td>{{ generated_at }}</td></tr>
+  <tr><td class="k">Employees</td><td>{{ case.client_profile.employees if case.client_profile.employees is not none else "Not stated" }}</td></tr>
+</table>
+
+<h2>Overview</h2>
+<table class="overview">
+  <tr>
+    <td class="band band-{{ case.final_band }}"><span class="band-name">{{ case.final_band }} risk</span><br /><span class="label">Overall risk band</span></td>
+    <td><span class="big">{{ sections_assessed }}</span><br /><span class="label">Cover sections assessed</span></td>
+    <td><span class="big">{{ case.approved_findings|length }}</span><br /><span class="label">Risk factors identified</span></td>
+  </tr>
+</table>
+<br />
+<p>{{ case.summary or case.client_profile.summary }}</p>
+
+{% if case.needs %}
+<h2>Cover sections</h2>
+<table class="needs">
+  <tr><th style="width:30%">Section</th><th style="width:18%">Assessment</th><th>Reason</th></tr>
+  {% for need in case.needs %}
+  <tr>
+    <td>{{ section(need.section).name }}{% if need.motor_sub_type %}<br /><span class="small muted">{{ need.motor_sub_type.value|replace("-", " ")|capitalize }}</span>{% endif %}</td>
+    <td class="req req-{{ need.requirement.value }}">{{ requirement_labels[need.requirement.value] }}</td>
+    <td>{{ need.reason }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>Risk factors by section</h2>
+<p class="small muted">Each factor quotes the submission text it was drawn from, so it can be checked against the source.</p>
+{% for group in groups %}
+<h3>{{ group.cover.number }}. {{ group.cover.name }}</h3>
+{% for index, f in group["items"] %}
+<table class="finding"><tr><td>
+  <span class="finding-title">{{ f.factor_name|replace("_", " ")|capitalize }}</span>
+  &nbsp; <span class="sev sev-{{ f.severity.value }}">{{ f.severity.value }} severity</span>
+  {% if f.assessment_note %}<div class="note">{{ f.assessment_note }}</div>{% endif %}
+  <p style="margin-top:3pt">{{ f.reasoning }}</p>
+  <div class="evidence">From the submission: &ldquo;{{ f.evidence_quote }}&rdquo;</div>
+</td></tr></table>
+{% endfor %}
+{% else %}
+<p class="muted">No risk factors were recorded for this case.</p>
+{% endfor %}
+
+<div class="disclaimer">
+  This report records a risk assessment reviewed and approved by an underwriter. It is not a quotation,
+  does not constitute cover, and states no premium, rate or sum insured.
+  Converge AI (Pty) Ltd · Johannesburg, South Africa · convergeai.co.za
+</div>
+
+</body>
+</html>
