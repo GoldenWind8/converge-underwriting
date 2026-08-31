@@ -12,12 +12,14 @@
   .needs-table td { padding:12px 14px; }
   .sec-name { font-weight:700; white-space:nowrap; }
   .sec-name .mono { display:block; color:var(--muted); font-weight:400; font-size:10px; }
-  .sec-scope { max-width:420px; color:var(--muted); font-size:11px; line-height:1.5; }
+  .sec-scope { max-width:360px; color:var(--muted); font-size:11px; line-height:1.5; }
   .req-select { min-width:140px; }
   .req-select.required { border-color:#b83c3c55; background:#fdf4f4; }
-  .req-select.consider { border-color:#b4791355; background:#fdfaf2; }
-  .reason { max-width:430px; color:#40596b; font-size:12px; }
+  .reason { max-width:380px; color:#40596b; font-size:12px; }
   .motor-sub { margin-top:8px; }
+  .si-cell { min-width:150px; }
+  .si-cell input { text-align:right; font-variant-numeric:tabular-nums; }
+  .si-basis { margin-top:4px; color:var(--muted); font-size:10px; max-width:170px; }
   .confirm-bar { position:sticky; bottom:12px; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:18px; padding:14px 16px; border:1px solid #bcc5fb; border-radius:12px; background:rgba(247,247,255,.95); box-shadow:0 12px 35px rgba(15,17,32,.16); backdrop-filter:blur(14px); }
   .confirm-bar strong { display:block; font-size:12px; }.confirm-bar span { color:var(--muted); font-size:11px; }
   @media(max-width:900px){.stepper{display:none}.sec-scope{display:none}}
@@ -26,24 +28,24 @@
 {% block content %}
   <div class="needs-top">
     <div><div class="eyebrow">Needs determination · Human gate 1</div><h1>{{ profile.business_name or "Unnamed applicant" }}</h1><p class="sub" style="margin:0">{{ profile.industry or "Industry not identified" }} · Determined by {{ engine }} · {{ generated_at }}</p></div>
-    <div class="stepper"><span class="step done"><span class="step-num">✓</span>Submit</span><span class="step active"><span class="step-num">2</span>Needs</span><span class="step"><span class="step-num">3</span>Review</span><span class="step"><span class="step-num">4</span>Learn</span></div>
+    <div class="stepper"><span class="step done"><span class="step-num">✓</span>Submit</span><span class="step active"><span class="step-num">2</span>Needs</span><span class="step"><span class="step-num">3</span>Review</span><span class="step"><span class="step-num">4</span>Price</span><span class="step"><span class="step-num">5</span>Learn</span></div>
   </div>
 
   {% if determination.business_note %}<div class="notice business-note">{{ determination.business_note }}</div>{% endif %}
-  <p class="sub">Only sections you confirm as <strong>required</strong> are assessed — one focused model call each. Getting this table right is the cheapest place to correct the system: a wrong section set wastes every assessment downstream of it.</p>
+  <p class="sub">Only sections you confirm as <strong>required</strong> are assessed — one focused model call each. Sums insured are pre-filled from figures the submission states; confirm or correct them here, because only a confirmed figure is ever priced.</p>
 
   <form action="/needs/{{ needs_id }}" method="post" id="needs-form">
     <div class="card" style="overflow:auto">
       <table class="needs-table">
-        <thead><tr><th>Section</th><th class="hide-small">What it covers</th><th>Determination</th><th>Reason</th></tr></thead>
+        <thead><tr><th>Section</th><th class="hide-small">What it covers</th><th>Determination</th><th>Sum insured (R)</th><th>Reason</th></tr></thead>
         <tbody>
-          {% for need in determination.needs %}{% set cover = cover_sections[loop.index0] %}
+          {% for need in determination.needs %}{% set cover = cover_sections[loop.index0] %}{% set si = sums.get(cover.id) %}
           <tr>
             <td class="sec-name">{{ cover.number }}. {{ cover.name }}<span class="mono">{{ cover.id.value }}</span></td>
             <td class="sec-scope hide-small">{{ cover.scope }}</td>
             <td>
               <select class="req-select {{ need.requirement.value }}" name="requirement_{{ cover.id.value }}">
-                {% for req in ["required", "consider", "not-applicable"] %}
+                {% for req in ["required", "not-applicable"] %}
                 <option value="{{ req }}" {% if need.requirement.value == req %}selected{% endif %}>{{ req|replace("-", " ")|title }}</option>
                 {% endfor %}
               </select>
@@ -55,6 +57,12 @@
                 {% endfor %}
               </select>
               {% endif %}
+            </td>
+            <td class="si-cell">
+              <input type="text" inputmode="numeric" name="sum_insured_{{ cover.id.value }}"
+                     value="{% if si and si.amount is not none %}{{ "{:,}".format(si.amount)|replace(",", " ") }}{% endif %}"
+                     placeholder="Not stated" aria-label="Sum insured for {{ cover.name }}" />
+              {% if si and si.basis %}<div class="si-basis">{{ si.basis }}</div>{% endif %}
             </td>
             <td class="reason">{{ need.reason }}</td>
           </tr>
@@ -74,9 +82,10 @@
   function recount(){
     let count=0;
     document.querySelectorAll('.req-select').forEach(sel=>{
-      sel.classList.remove('required','consider');
-      if(sel.value==='required'){count++;sel.classList.add('required');}
-      if(sel.value==='consider')sel.classList.add('consider');
+      sel.classList.remove('required');
+      const row=sel.closest('tr'),si=row.querySelector('.si-cell');
+      if(sel.value==='required'){count++;sel.classList.add('required');si.style.visibility='visible';}
+      else{si.style.visibility='hidden';}
     });
     document.getElementById('required-count').textContent=count;
     document.getElementById('required-count-btn').textContent=count;

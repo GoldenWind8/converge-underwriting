@@ -53,9 +53,10 @@
 
   <section class="card">
     <div class="flow">
-      <div class="flow-step"><span class="flow-num">01</span><strong>Needs</strong><span>Confirm which of the 18 cover sections apply</span></div>
+      <div class="flow-step"><span class="flow-num">01</span><strong>Needs</strong><span>Confirm the cover sections and sums insured that apply</span></div>
       <div class="flow-step"><span class="flow-num">02</span><strong>Assess &amp; review</strong><span>Per-section, evidence-backed findings under your control</span></div>
-      <div class="flow-step"><span class="flow-num">03</span><strong>Learn</strong><span>Approve a governed playbook update</span></div>
+      <div class="flow-step"><span class="flow-num">03</span><strong>Price</strong><span>Deterministic premiums from broker base rates and band loadings</span></div>
+      <div class="flow-step"><span class="flow-num">04</span><strong>Learn</strong><span>Approve a governed playbook update</span></div>
     </div>
     <form id="assess-form" class="submission" action="/assess" method="post" enctype="multipart/form-data">
       <label for="raw_text">Application document or broker notes</label>
@@ -67,7 +68,7 @@
           <button type="submit">Begin assessment <span aria-hidden="true">→</span></button>
         </div>
       </div>
-      <div class="demo-tip"><span>✦</span><div><strong>Recommended demo journey</strong><span>Load the sample, adjust a finding during review, approve the proposed lesson, then assess a similar risk to see the new precedent in action.</span></div></div>
+      <div class="demo-tip"><span>✦</span><div><strong>Recommended demo journey</strong><span>Load the sample, adjust a finding during review, confirm the premium table, approve the proposed lesson, then assess a similar risk to see the new precedent in action.</span></div></div>
     </form>
   </section>
   {% if sample %}<template id="sample-text">{{ sample }}</template>{% endif %}

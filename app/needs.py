@@ -29,12 +29,11 @@ _MOTOR_LINES = "\n".join(f"- {t.value}: {note}" for t, note in MOTOR_SUB_TYPE_NO
 
 NEEDS_SYSTEM = f"""You are the needs-analysis engine inside Converge Underwriting, a tool used by South African short-term insurance underwriters and brokers. A commercial submission has come in. Before anyone assesses risk, someone has to work out which cover sections this business actually needs.
 
-Go through every section below and place it in one of three buckets:
+Go through every section below and place it in one of two buckets:
 - required: the submission shows an exposure this section is for. The business would be exposed without it.
-- consider: plausibly relevant, but the submission does not settle it - the exposure may be small, or a fact you would need is missing. Say which fact.
-- not-applicable: the submission positively rules it out. Not "probably fine" - genuinely no exposure, or someone else carries it.
+- not-applicable: no exposure this section is for - genuinely none, or someone else carries it.
 
-Decide from the submission, not from what a business of this type usually buys. Concretely: a business with no vehicles does not need Motor; a tenant whose landlord insures the structure does not need Buildings Combined; a business that handles no cash does not need Money; a business that does not repair or sell vehicles for a living does not need Motor Traders. Where the submission is silent on something material, that is "consider" with the missing fact named - not "required" on a guess, and not "not-applicable" on an assumption.
+Decide from the submission, not from what a business of this type usually buys. Concretely: a business with no vehicles does not need Motor; a tenant whose landlord insures the structure does not need Buildings Combined; a business that handles no cash does not need Money; a business that does not repair or sell vehicles for a living does not need Motor Traders. Where the submission is silent on something material, mark the section required and name the missing fact in the reason - the broker confirms this table and can strike the section, but cannot recover one that was silently ruled out.
 
 Be willing to mark sections not-applicable. An analysis that marks everything required is the same as no analysis, and it puts the client on cover they cannot claim under.
 
@@ -46,7 +45,7 @@ The cover sections:
 
 {_SECTION_LINES}
 
-Motor sub-types. If the motor section is required or worth considering, choose the sub-type that fits what the submission says about the vehicles and how the business depends on them, and justify that choice in the reason. Use the id:
+Motor sub-types. If the motor section is required, choose the sub-type that fits what the submission says about the vehicles and how the business depends on them, and justify that choice in the reason. Use the id:
 {_MOTOR_LINES}"""
 
 
@@ -62,8 +61,8 @@ def determine_needs(raw_text: str) -> NeedsDetermination:
 
 def _repair(needs: List[SectionNeed]) -> List[SectionNeed]:
     """Guarantee exactly one entry per section, in canonical order. A section
-    the model skipped becomes 'consider' with an honest reason — never silently
-    invented, never silently dropped."""
+    the model skipped becomes 'not-applicable' with an honest reason — never
+    silently invented, never silently dropped — for the broker to overrule."""
     by_section = {}
     for need in needs:
         by_section.setdefault(need.section, need)  # first entry wins on duplicates
@@ -71,7 +70,7 @@ def _repair(needs: List[SectionNeed]) -> List[SectionNeed]:
     for cover in COVER_SECTIONS:
         need = by_section.get(cover.id) or SectionNeed(
             section=cover.id,
-            requirement=Requirement.consider,
+            requirement=Requirement.not_applicable,
             reason="The model did not classify this section — review manually.",
         )
         if need.section != SectionId.motor:

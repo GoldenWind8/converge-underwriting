@@ -69,6 +69,18 @@ def band_for_findings(findings: List[RiskFinding]) -> str:
     return "Low"
 
 
+def band_for_section(findings: List[RiskFinding]) -> str:
+    """Band for ONE cover section, from that section's findings only.
+
+    This is the single seam for section rating: the pricing engine and every
+    surface that shows a per-section band call this and nothing else, so a
+    future refinement — e.g. crediting mitigation factors to offset a single
+    worst finding — changes this function and nothing downstream of it.
+    Today it applies the same deterministic count rule as the case band.
+    """
+    return band_for_findings(findings)
+
+
 def _normalise(text: str) -> str:
     """Lowercase and collapse everything non-alphanumeric, so an evidence quote
     still matches through punctuation/whitespace differences."""

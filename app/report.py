@@ -24,15 +24,25 @@ from .models import (CaseRecord, NeedsDetermination, RiskAssessmentDraft,
 from .sections import (COVER_SECTIONS, MOTOR_SUB_TYPE_NOTES, SectionId,
                        section)
 
+
+def _rand(value) -> str:
+    """1234567 -> 'R 1 234 567' (space-grouped, whole rand)."""
+    if value is None:
+        return "—"
+    return "R " + f"{round(value):,}".replace(",", " ")
+
+
 _TEMPLATES = Path(__file__).parent / "templates"
 _env = Environment(
     loader=FileSystemLoader(str(_TEMPLATES)),
     autoescape=select_autoescape(["html"]),
 )
+_env.filters["rand"] = _rand
 _env.globals.update(
     cover_sections=COVER_SECTIONS,
     motor_sub_type_notes=MOTOR_SUB_TYPE_NOTES,
     severity_values=["low", "medium", "high", "severe"],
+    section=section,
 )
 
 
@@ -59,10 +69,11 @@ def render_index(sample: str = "", case_count: int = 0, rule_count: int = 0) -> 
 
 
 def render_needs(needs_id: str, determination: NeedsDetermination, profile,
-                 engine: str, generated_at: str) -> str:
+                 engine: str, generated_at: str,
+                 sums: Optional[dict] = None) -> str:
     return _env.get_template("needs.html").render(
         needs_id=needs_id, determination=determination, profile=profile,
-        engine=engine, generated_at=generated_at,
+        engine=engine, generated_at=generated_at, sums=sums or {},
     )
 
 
@@ -85,6 +96,25 @@ def render_report(case: CaseRecord, engine: str, generated_at: str,
         case=case, engine=engine, generated_at=generated_at,
         learning_note=learning_note, learning_proposal=learning_proposal,
         groups=_section_groups(case.approved_findings, case.needs),
+    )
+
+
+def render_pricing(case: CaseRecord, generated_at: str) -> str:
+    """The Price gate (human gate 3). Justification bullets per line come from
+    the case's approved findings, grouped by section."""
+    findings_by_section: dict = {}
+    for f in case.approved_findings:
+        findings_by_section.setdefault(f.section, []).append(f)
+    return _env.get_template("pricing.html").render(
+        case=case, pricing=case.pricing, generated_at=generated_at,
+        findings_by_section=findings_by_section,
+    )
+
+
+def render_rates(rates: dict, loadings: dict, saved: bool = False) -> str:
+    band_order = ["Low", "Moderate", "Elevated", "High"]
+    return _env.get_template("rates.html").render(
+        rates=rates, loadings=loadings, band_order=band_order, saved=saved,
     )
 
 

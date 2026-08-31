@@ -11,7 +11,7 @@ def _need(section, requirement=Requirement.required, **kw):
                        reason="stated in the submission", **kw)
 
 
-def test_missing_sections_are_repaired_to_consider(fake_llm):
+def test_missing_sections_are_repaired_to_not_applicable(fake_llm):
     fake_llm.register(NeedsDetermination, NeedsDetermination(
         business_note="A bakery.",
         needs=[_need(SectionId.fire)],
@@ -20,7 +20,7 @@ def test_missing_sections_are_repaired_to_consider(fake_llm):
     assert len(determination.needs) == 18
     by_section = {n.section: n for n in determination.needs}
     assert by_section[SectionId.fire].requirement == Requirement.required
-    assert by_section[SectionId.motor].requirement == Requirement.consider
+    assert by_section[SectionId.motor].requirement == Requirement.not_applicable
     assert "review manually" in by_section[SectionId.motor].reason
 
 

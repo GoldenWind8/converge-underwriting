@@ -59,7 +59,7 @@
   <div class="review-top">
     <div><div class="eyebrow">Human decision workspace · Gate 2</div><h1>{{ draft.client_profile.business_name or "Unnamed applicant" }}</h1><p class="sub" style="margin:0">{{ draft.client_profile.industry or "Industry not identified" }} · Drafted by {{ engine }} · {{ generated_at }}</p></div>
     <div class="page-actions">
-      <div class="stepper"><span class="step done"><span class="step-num">✓</span>Submit</span><span class="step done"><span class="step-num">✓</span>Needs</span><span class="step active"><span class="step-num">3</span>Review</span><span class="step"><span class="step-num">4</span>Learn</span></div>
+      <div class="stepper"><span class="step done"><span class="step-num">✓</span>Submit</span><span class="step done"><span class="step-num">✓</span>Needs</span><span class="step active"><span class="step-num">3</span>Review</span><span class="step"><span class="step-num">4</span>Price</span><span class="step"><span class="step-num">5</span>Learn</span></div>
       <div class="band-summary"><div class="hint">Draft referral band<br><span style="font-size:10px">severity-derived · no score</span></div><span class="band {{ result.band }}" id="live-band">{{ result.band }}</span></div>
     </div>
   </div>
@@ -76,7 +76,7 @@
         <details class="card needs-context">
           <summary>Confirmed needs determination · {{ needs|selectattr("requirement.value", "equalto", "required")|list|length }} required section(s)</summary>
           <table><tbody>
-            {% for need in needs %}<tr><td class="mono">{{ need.section.value }}</td><td><span class="pill">{{ need.requirement.value|replace("-", " ") }}</span></td><td class="muted">{{ need.reason }}</td></tr>{% endfor %}
+            {% for need in needs if need.requirement.value == "required" %}<tr><td class="mono">{{ need.section.value }}</td><td><span class="pill">required</span></td><td class="muted">{{ need.reason }}</td></tr>{% endfor %}
           </tbody></table>
         </details>
 
@@ -116,7 +116,7 @@
         <div class="add-card">
           <div class="add-grid">
             <div><label>Factor name</label><input type="text" name="new_factor_name" placeholder="e.g. missing_fire_certificate" /></div>
-            <div><label>Section</label><select name="new_section">{% for need in needs if need.requirement.value == "required" %}<option value="{{ need.section.value }}">{{ need.section.value }}</option>{% endfor %}{% for need in needs if need.requirement.value != "required" %}<option value="{{ need.section.value }}">{{ need.section.value }} ({{ need.requirement.value }})</option>{% endfor %}</select></div>
+            <div><label>Section</label><select name="new_section">{% for need in needs if need.requirement.value == "required" %}<option value="{{ need.section.value }}">{{ need.section.value }}</option>{% endfor %}</select></div>
             <div><label>Severity</label><select name="new_severity">{% for s in severity_values %}<option value="{{ s }}" {% if s == "medium" %}selected{% endif %}>{{ s|title }}</option>{% endfor %}</select></div>
           </div>
           <div class="add-grid-wide">

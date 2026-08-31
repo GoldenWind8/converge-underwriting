@@ -28,6 +28,7 @@ class FakeLLM:
 @pytest.fixture(autouse=True)
 def isolated_data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("UW_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("UW_CONFIG_DIR", str(tmp_path / "config"))
 
 
 @pytest.fixture

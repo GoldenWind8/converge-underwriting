@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Pricing {{ case.case_id }} — Converge Underwriting{% endblock %}
+{% block wrap_class %}wide{% endblock %}
+{% block css %}
+<style>
+  .pricing-top { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:22px; }
+  .stepper { display:flex; gap:0; align-items:center; }
+  .step { display:flex; align-items:center; gap:7px; color:var(--muted-2); font-size:11px; font-weight:600; }
+  .step:not(:last-child)::after { content:""; width:28px; height:1px; margin:0 8px; background:var(--line); }
+  .step.done,.step.active { color:var(--brand-dark); }.step-num { display:grid; place-items:center; width:23px; height:23px; border:1px solid var(--line); border-radius:50%; }
+  .step.done .step-num,.step.active .step-num { color:#fff; border-color:var(--brand); background:var(--brand); }
+  .totals { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+  .tile { padding:17px 20px; }
+  .tile .lbl { color:var(--muted); font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; margin-bottom:6px; }
+  .tile .val { color:var(--navy-950); font-size:23px; font-weight:700; letter-spacing:-.02em; line-height:1.1; font-variant-numeric:tabular-nums; }
+  .tile .val.adj { color:var(--brand-dark); }
+  .tile .sub2 { color:var(--muted); font-size:11px; margin-top:6px; }
+  .delta-up { color:var(--high); } .delta-down { color:var(--low); }
+  .price-table th.r, .price-table td.r { text-align:right; }
+  .price-table td { vertical-align:middle; font-variant-numeric:tabular-nums; }
+  .price-table td.sec { font-weight:600; font-size:13px; white-space:nowrap; }
+  .loading-cell { display:flex; align-items:center; gap:8px; }
+  .loading-cell input { width:72px; text-align:right; padding:7px 9px; }
+  .loading-cell .unit { color:var(--muted); font-size:12px; }
+  .pill.manual { color:#765819; background:var(--gold-soft); border-color:#ead9ad; }
+  .row-toggle { padding:0; width:26px; height:26px; border-radius:6px; color:var(--muted); background:#f7f9fa; border:1px solid var(--line); box-shadow:none; font-size:11px; }
+  .row-toggle:hover { transform:none; box-shadow:none; background:var(--brand-soft); color:var(--brand-dark); }
+  tr.why td { padding:4px 14px 15px 54px; background:#fbfcfd; }
+  .why-line { margin:7px 0 6px; font-size:12px; font-weight:700; color:var(--navy-900); }
+  .why-line .pill { margin-left:8px; }
+  tr.why ul { margin:0; padding-left:18px; }
+  tr.why li { margin-bottom:4px; font-size:12.5px; }
+  .unpriced td { color:var(--muted); }
+  tfoot td { padding:14px; background:#f8fafb; border-top:2px solid var(--line); border-bottom:0; font-weight:700; }
+  .commit-bar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:18px; padding:14px 16px; border:1px solid #bcc5fb; border-radius:12px; background:#f7f7ff; }
+  .commit-bar strong { display:block; font-size:12px; } .commit-bar span { color:var(--muted); font-size:11px; }
+  .actions { display:flex; gap:9px; }
+  @media(max-width:1000px){.totals{grid-template-columns:1fr 1fr}.stepper{display:none}}
+  @media(max-width:700px){.pricing-top{flex-direction:column;align-items:flex-start}.totals{grid-template-columns:1fr}.commit-bar{flex-direction:column;align-items:stretch}.actions{flex-direction:column}}
+</style>
+{% endblock %}
+{% block content %}
+  <div class="pricing-top">
+    <div>
+      <div class="eyebrow">Pricing engine · Human gate 3</div>
+      <h1>{{ case.client_profile.business_name or "Unnamed applicant" }}</h1>
+      <p class="sub" style="margin:0">Case {{ case.case_id }} · Annual premiums, ZAR · {{ generated_at }}</p>
+    </div>
+    <div class="stepper"><span class="step done"><span class="step-num">✓</span>Submit</span><span class="step done"><span class="step-num">✓</span>Needs</span><span class="step done"><span class="step-num">✓</span>Review</span><span class="step active"><span class="step-num">4</span>Price</span><span class="step"><span class="step-num">5</span>Learn</span></div>
+  </div>
+
+  <div class="totals">
+    <div class="card tile"><div class="lbl">Base premium</div><div class="val" id="t-base">{{ pricing.base_total|rand }}</div></div>
+    <div class="card tile"><div class="lbl">Adjusted premium</div><div class="val adj" id="t-adj">{{ pricing.adjusted_total|rand }}</div><div class="sub2" id="t-delta"></div></div>
+    <div class="card tile"><div class="lbl">Sections priced</div><div class="val">{{ pricing.lines|rejectattr("base_premium", "none")|list|length }} of {{ pricing.lines|length }}</div>{% set unpriced = pricing.lines|selectattr("base_premium", "none")|list %}{% if unpriced %}<div class="sub2">Awaiting sum insured: {% for l in unpriced %}{{ section(l.section).name }}{% if not loop.last %}, {% endif %}{% endfor %}</div>{% endif %}</div>
+    <div class="card tile"><div class="lbl">Manual overrides</div><div class="val" id="t-overrides">{{ pricing.lines|selectattr("overridden")|list|length }}</div></div>
+  </div>
+
+  <form action="/cases/{{ case.case_id }}/pricing" method="post">
+    <div class="card">
+      <div class="panel-head">
+        <h2>Premium by cover section</h2>
+        <span class="pill"><span class="mono">sum insured × rate × (1 + loading)</span></span>
+      </div>
+      <div style="overflow-x:auto">
+      <table class="price-table">
+        <thead><tr>
+          <th style="width:30px"></th><th>Section</th><th class="r">Sum insured</th><th class="r">Rate</th>
+          <th class="r">Base premium</th><th>Band</th><th>Loading</th><th class="r">Adjusted premium</th>
+        </tr></thead>
+        <tbody id="rows">
+          {% for line in pricing.lines %}{% set cover = section(line.section) %}
+          {% if line.base_premium is none %}
+          <tr class="unpriced">
+            <td></td>
+            <td class="sec" style="color:var(--ink)">{{ cover.number }}. {{ cover.name }}</td>
+            <td class="r" style="font-size:12px">Not stated at the needs gate</td>
+            <td class="r">{{ "%.2f"|format(line.rate) }}%</td>
+            <td class="r">—</td>
+            <td><span class="band {{ line.band }}">{{ line.band }}</span></td>
+            <td class="muted">{{ "%+g"|format(line.table_loading) }}%</td>
+            <td class="r">Not priced</td>
+          </tr>
+          {% else %}
+          <tr class="priced-row" data-section="{{ line.section.value }}" data-base="{{ line.base_premium }}" data-table="{{ line.table_loading }}">
+            <td><button class="row-toggle" type="button" aria-label="Show justification for {{ cover.name }}" aria-expanded="false">▸</button></td>
+            <td class="sec">{{ cover.number }}. {{ cover.name }}</td>
+            <td class="r">{{ line.sum_insured|rand }}</td>
+            <td class="r">{{ "%.2f"|format(line.rate) }}%</td>
+            <td class="r">{{ line.base_premium|rand }}</td>
+            <td><span class="band {{ line.band }}">{{ line.band }}</span></td>
+            <td><div class="loading-cell">
+              <input type="number" step="1" name="loading_{{ line.section.value }}" value="{{ "%g"|format(line.applied_loading) }}" aria-label="Loading percent for {{ cover.name }}" />
+              <span class="unit">%</span>
+              <span class="pill manual" {% if not line.overridden %}hidden{% endif %}>manual</span>
+            </div></td>
+            <td class="r adjusted" style="font-weight:600">{{ line.adjusted_premium|rand }}</td>
+          </tr>
+          <tr class="why" hidden>
+            <td colspan="8">
+              <div class="why-line"><span class="adj-word">{% if line.applied_loading > 0 %}Loaded +{{ "%g"|format(line.applied_loading) }}%{% elif line.applied_loading < 0 %}Discounted {{ "%g"|format(line.applied_loading) }}%{% else %}No adjustment{% endif %}</span> — rated {{ line.band }}<span class="pill manual table-note" {% if not line.overridden %}hidden{% endif %}>manual — band table: {{ "%+g"|format(line.table_loading) }}%</span></div>
+              {% if line.basis %}<div class="hint" style="margin-bottom:6px">Sum insured basis: {{ line.basis }}</div>{% endif %}
+              <ul>
+                {% for f in findings_by_section.get(line.section, []) %}
+                <li><span class="mono">{{ f.factor_name }}</span> <span class="severity {{ f.severity.value }}">{{ f.severity.value }}</span></li>
+                {% else %}
+                <li class="muted">No approved findings in this section — banded Low.</li>
+                {% endfor %}
+              </ul>
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+        <tfoot><tr>
+          <td></td><td>Total</td><td></td><td></td>
+          <td class="r" id="f-base">{{ pricing.base_total|rand }}</td><td></td><td></td>
+          <td class="r" id="f-adj" style="color:var(--brand-dark)">{{ pricing.adjusted_total|rand }}</td>
+        </tr></tfoot>
+      </table>
+      </div>
+    </div>
+
+    <div class="commit-bar">
+      <div><strong>Save pricing for {{ case.case_id }}</strong><span>Stored with the case and shown on the report and client PDF. Premiums are recalculated from the confirmed figures when you save.</span></div>
+      <div class="actions"><a class="btn secondary" href="/rates">Base rates &amp; loadings</a><button type="submit">Save pricing &amp; continue <span aria-hidden="true">→</span></button></div>
+    </div>
+  </form>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Mirrors pricing.price_case for instant feedback; the saved premiums are
+  // recomputed server-side from the same formula.
+  const ZAR=n=>'R '+Math.round(n).toLocaleString('en-US').replace(/,/g,' ');
+  function recalc(){
+    let base=0,adj=0,overrides=0;
+    document.querySelectorAll('.priced-row').forEach(row=>{
+      const b=Number(row.dataset.base),table=Number(row.dataset.table);
+      const v=Number(row.querySelector('input').value)||0;
+      const a=b*(1+v/100);
+      row.querySelector('.adjusted').textContent=ZAR(a);
+      const manual=v!==table;
+      row.querySelector('.pill.manual').hidden=!manual;
+      const why=row.nextElementSibling;
+      if(why&&why.classList.contains('why')){
+        why.querySelector('.table-note').hidden=!manual;
+        why.querySelector('.adj-word').textContent=v>0?('Loaded +'+v+'%'):v<0?('Discounted '+v+'%'):'No adjustment';
+      }
+      if(manual)overrides++;
+      base+=b;adj+=a;
+    });
+    document.getElementById('t-base').textContent=ZAR(base);
+    document.getElementById('t-adj').textContent=ZAR(adj);
+    document.getElementById('f-base').textContent=ZAR(base);
+    document.getElementById('f-adj').textContent=ZAR(adj);
+    document.getElementById('t-overrides').textContent=overrides;
+    const delta=adj-base,el=document.getElementById('t-delta');
+    el.innerHTML='';
+    if(base>0){
+      const span=document.createElement('span');
+      span.className=delta>0?'delta-up':delta<0?'delta-down':'';
+      span.textContent=(delta>=0?'+':'−')+ZAR(Math.abs(delta))+' · '+(delta>=0?'+':'−')+Math.abs(delta/base*100).toFixed(1)+'%';
+      el.append(span,' vs base');
+    }
+  }
+  document.querySelectorAll('.priced-row input').forEach(i=>i.addEventListener('input',recalc));
+  document.querySelectorAll('.row-toggle').forEach(btn=>btn.addEventListener('click',()=>{
+    const why=btn.closest('tr').nextElementSibling;
+    why.hidden=!why.hidden;
+    btn.textContent=why.hidden?'▸':'▾';
+    btn.setAttribute('aria-expanded',String(!why.hidden));
+  }));
+  recalc();
+</script>
+{% endblock %}

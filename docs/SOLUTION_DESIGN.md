@@ -25,9 +25,12 @@ Per the client's requirements:
 3. **Needs before risk.** Work out which of the 18 cover sections (from the
    broker needs analysis) a business actually needs, and let the underwriter
    confirm that before anything is assessed.
-4. **Assess, never price.** No premium, rate, sum insured, probability or score
-   anywhere in the output — a standardised categorical severity and a derived
-   referral band only.
+4. **The model assesses; the engine prices.** The LLM never produces a
+   premium, rate, probability or score — a standardised categorical severity
+   and a derived band only. Premiums come from a separate deterministic
+   pricing engine (`pricing.py`, added 2026-08-31 after the broker meeting of
+   2026-08-30): sum insured x broker base rate x band loading, reproducible
+   by hand, with sums insured confirmed by the broker at gate 1.
 
 Non-goals for the POC: multi-tenant auth, production-grade vector search,
 fine-tuning, real-time chat integration.
@@ -173,21 +176,45 @@ retrieval until a human confirms it on `/cases`, and ingestion never writes to
 the playbook. That keeps the "only approved data enters memory" rule honest
 even for machine-extracted history.
 
-### 4.5 The three gates in the UI
+### 4.5 The four gates in the UI
 
 FastAPI + Jinja, single implicit reviewer, no auth:
 
-1. **Needs table** — the underwriter can re-bucket any section and pick the
-   Motor sub-type; at least one section must be required.
+1. **Needs table** — the underwriter can re-bucket any section (required /
+   not-applicable), pick the Motor sub-type, and confirm or correct the
+   pre-filled sum insured per required section; at least one section must be
+   required. Sums are pre-filled by a fast extraction call (`sums.py`) that
+   only transcribes figures the submission states — the confirmed number is
+   the only one ever priced.
 2. **Review** — split-screen draft with the source document: change a
    severity, remove a finding, add one (subject to the same evidence check),
    and say why on each edit. Approve stores the case and triggers reflection.
-3. **Learning** — the proposed playbook, editable, with accept / skip. The
+3. **Price** — the deterministic premium table (`pricing.py`): per required
+   section, sum insured x base rate gives the base premium, and the section's
+   band (guardrails.band_for_section over that section's approved findings)
+   picks the loading from the band table. The underwriter can override a
+   loading; the override is disclosed against the table value, on screen and
+   on the PDF. Sections without a confirmed sum insured show "not priced" —
+   the engine never invents a number.
+4. **Learning** — the proposed playbook, editable, with accept / skip. The
    approved case is a precedent either way.
 
 The decision page then offers a client-facing PDF (`pdf.py`, xhtml2pdf) that
 omits internal codes — factor slugs, rule and precedent ids, confidence,
-reviewer edits.
+reviewer edits — and includes the premium calculation with any overrides
+disclosed.
+
+### 4.6 `pricing.py` — the deterministic pricing engine
+
+No LLM, like guardrails.py: `premium = sum insured x rate x (1 + loading)`.
+Base rates (annual % of sum insured, flat per section) live in
+`config/rates.json`; the band -> loading table (one global table, negative
+values discount) in `config/loadings.json`. Both are git-tracked, created
+with placeholder values on first use (placeholders stand in until the
+broker's rate sheet arrives), and editable on the `/rates` page.
+`band_for_section()` in guardrails.py is deliberately the *single* seam for
+section rating: crediting mitigation factors later changes that one function
+and nothing downstream.
 
 ## 5. Embeddings
 
@@ -301,7 +328,10 @@ numeric score at all** (2026-08-26), because anything numeric reads as a
 price or a rating. Severity is a standardised categorical scale used
 identically across sections and cases, the referral band is a deterministic
 lookup over the severity profile (§4.3), and every prompt carries an explicit
-no-pricing boundary. Named per-field rules are gone.
+no-pricing boundary. Named per-field rules are gone. The 2026-08-31 pricing
+engine does not weaken this: premiums are computed *after* approval by plain
+Python (§4.6) from broker-confirmed inputs — the LLM still never emits a
+number.
 
 ### 6.4 ⚖️ Reflection cadence — synchronous per sign-off vs batched
 Per sign-off is what is built: it makes the demo interactive — correct one

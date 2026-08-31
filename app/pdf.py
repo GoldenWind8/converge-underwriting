@@ -23,7 +23,6 @@ _LOGO = Path(__file__).parent / "static" / "converge-underwriting-logo.png"
 
 REQUIREMENT_LABELS = {
     Requirement.required.value: "Required",
-    Requirement.consider.value: "Worth considering",
     Requirement.not_applicable.value: "Not applicable",
 }
 

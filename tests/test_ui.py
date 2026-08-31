@@ -83,7 +83,8 @@ def test_report_renders_needs_rationale_and_reviewer_notes():
     assert "Needs determination" in html
     assert "Gas kitchen on site." in html
     assert "Certificates are non-negotiable." in html
-    assert "Pricing" in html and "Out of scope" in html
+    assert "Out of scope" not in html, "pricing is in scope now — deterministic, never LLM"
+    assert "Premiums are deterministic" in html
 
 
 def test_dashboard_and_playbook_render_enterprise_demo_elements():

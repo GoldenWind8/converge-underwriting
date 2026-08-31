@@ -16,10 +16,12 @@ The flow's shapes, in pipeline order:
                                      Only records a human signed off ever
                                      become non-provisional CaseRecords.
 
-There is deliberately no numeric score anywhere: severity is a standardised
-categorical scale, and the case band is derived from the severity profile by
-deterministic code in guardrails.py. Nothing the system emits can be read as
-a price or a rating.
+There is deliberately no numeric score anywhere in the *assessment*: severity
+is a standardised categorical scale, and bands are derived from the severity
+profile by deterministic code in guardrails.py. Money enters exactly twice,
+and never through the assessment model: SumInsured records a figure the
+client stated (confirmed by the broker at gate 1), and CasePricing is the
+output of the deterministic pricing engine in pricing.py.
 """
 
 from __future__ import annotations
@@ -44,7 +46,6 @@ SEVERITY_ORDER = {Severity.low: 0, Severity.medium: 1, Severity.high: 2, Severit
 
 class Requirement(str, Enum):
     required = "required"
-    consider = "consider"
     not_applicable = "not-applicable"
 
 
@@ -65,7 +66,7 @@ class SectionNeed(BaseModel):
     requirement: Requirement
     reason: str = Field("", description="One line, grounded in the submission. Name the fact that decides it.")
     motor_sub_type: Optional[MotorSubType] = Field(
-        None, description="Only for the motor section, when required or worth considering: the sub-type that fits the submission.")
+        None, description="Only for the motor section, when required: the sub-type that fits the submission.")
 
 
 class NeedsDetermination(BaseModel):
@@ -103,6 +104,46 @@ class RiskAssessmentDraft(BaseModel):
     _available_rule_ids: Optional[Set[str]] = PrivateAttr(default=None)
 
 
+class SumInsured(BaseModel):
+    """A sum insured the client *stated*, lifted from the submission by an
+    extraction call and confirmed (or corrected) by the broker at gate 1.
+    Never an estimate: amount is None wherever the submission is silent."""
+
+    section: SectionId
+    amount: Optional[int] = Field(None, description="Whole rand, exactly as stated. None if the submission does not state a figure for this section.")
+    basis: str = Field("", description="What the figure is made of, quoting the labelled amounts, e.g. 'Plant R10 000 000 + stock R5 000 000'. Empty when amount is None.")
+
+
+class SumsInsured(BaseModel):
+    """Response shape of the sum-insured extraction call (sums.py)."""
+
+    items: List[SumInsured] = Field(default_factory=list, description="One entry per cover section listed in the prompt.")
+
+
+class PricedSection(BaseModel):
+    """One row of the deterministic pricing table (pricing.py — no LLM)."""
+
+    section: SectionId
+    band: str  # per-section band from guardrails.band_for_section
+    rate: float  # annual % of sum insured, from the rates config
+    table_loading: float  # % the band table dictates
+    applied_loading: float  # % actually applied — differs only on a manual override
+    sum_insured: Optional[int] = None
+    basis: str = ""
+    base_premium: Optional[int] = None  # rand per annum; None = not priced (no sum insured)
+    adjusted_premium: Optional[int] = None
+
+    @property
+    def overridden(self) -> bool:
+        return self.applied_loading != self.table_loading
+
+
+class CasePricing(BaseModel):
+    lines: List[PricedSection] = Field(default_factory=list)
+    base_total: int = 0
+    adjusted_total: int = 0
+
+
 class Correction(BaseModel):
     """One human edit, draft -> approved. The raw material for reflection."""
 
@@ -123,6 +164,10 @@ class CaseRecord(BaseModel):
     approved_findings: List[RiskFinding] = Field(default_factory=list)
     corrections: List[Correction] = Field(default_factory=list)
     final_band: str = "Low"
+    # Deterministic premium calculation (pricing.py), added at approval and
+    # updated when the underwriter saves the Price gate. None on old and
+    # chat-ingested cases.
+    pricing: Optional[CasePricing] = None
     # Chat-ingested cases stay provisional — invisible to retrieval — until a
     # human confirms them (docs/SOLUTION_DESIGN.md §4.4).
     provisional: bool = False

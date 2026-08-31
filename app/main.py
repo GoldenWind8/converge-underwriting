@@ -2,17 +2,21 @@
 FastAPI app — plumbing only; the interesting logic lives in needs.py,
 assess.py, guardrails.py and memory.py.
 
-The loop (three human gates):
-  POST /assess          raw text -> profile + needs determination -> needs table
-  POST /needs/{id}      GATE 1: the underwriter's confirmed table -> one
-                        assessment call per required section -> guardrails ->
-                        editable review page
-  POST /approve         GATE 2: reviewer's edits -> CaseRecord stored ->
-                        reflection proposes a playbook update
-  POST /learning/{id}   GATE 3: accept / edit / skip the playbook update
+The loop (four human gates):
+  POST /assess          raw text -> profile + needs determination + stated
+                        sums insured -> needs table
+  POST /needs/{id}      GATE 1: the underwriter's confirmed table (sections +
+                        sums insured) -> one assessment call per required
+                        section -> guardrails -> editable review page
+  POST /approve         GATE 2: reviewer's edits -> CaseRecord stored with a
+                        deterministic pricing draft -> Price gate
+  POST /cases/{id}/pricing  GATE 3: loadings confirmed/overridden -> pricing
+                        saved on the case -> report + learning proposal
+  POST /learning/{id}   GATE 4: accept / edit / skip the playbook update
   GET  /cases           browse memory;  GET /cases/{id} re-renders a stored report
   GET  /cases/{id}/pdf  client-facing PDF copy of a stored case (HTML -> xhtml2pdf)
   GET  /playbook        the current playbook
+  GET/POST /rates       base rates + band loadings config (config/*.json)
 
 Drafts awaiting a gate are held in memory (PENDING_NEEDS, DRAFTS) — fine for a
 single-process POC.
@@ -30,15 +34,17 @@ from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import guardrails, llm, memory
+from . import guardrails, llm, memory, pricing
 from .assess import assess_profile, assess_sections
 from .models import (CaseRecord, Correction, Requirement, RiskFinding,
-                     SectionNeed, Severity)
+                     SectionNeed, Severity, SumInsured)
 from .needs import determine_needs
 from .pdf import case_pdf, pdf_filename
 from .report import (render_cases, render_error, render_index, render_needs,
-                     render_playbook, render_report, render_review)
+                     render_playbook, render_pricing, render_rates,
+                     render_report, render_review)
 from .sections import MotorSubType, SectionId, section
+from .sums import extract_sums
 
 llm.require()  # no LLM configured -> fail here, at startup, with a clear message
 
@@ -49,11 +55,12 @@ _SAMPLE_PATH = Path(__file__).parent.parent / "sample_data" / "sample_applicatio
 _SAMPLE = _SAMPLE_PATH.read_text(encoding="utf-8") if _SAMPLE_PATH.exists() else ""
 _MAX_INPUT_BYTES = 250_000
 
-# needs_id -> {"determination": ..., "profile": ..., "engine": ..., "raw_text": ...}
+# needs_id -> {"determination": ..., "profile": ..., "sums": ..., "engine": ..., "raw_text": ...}
 PENDING_NEEDS: dict = {}
-# draft_id -> {"draft": ..., "result": ..., "engine": ..., "raw_text": ..., "needs": ..., "usage": ...}
+# draft_id -> {"draft": ..., "result": ..., "engine": ..., "raw_text": ..., "needs": ..., "sums": ..., "usage": ...}
 DRAFTS: dict = {}
 PENDING_LEARNING: dict[str, memory.LearningProposal] = {}
+LEARNING_NOTES: dict[str, str] = {}  # case_id -> note when the proposal failed
 
 
 def _now() -> str:
@@ -76,6 +83,12 @@ def _read_raw(text: Optional[str], file: Optional[UploadFile]) -> str:
     raise HTTPException(status_code=400, detail="Provide raw text or upload a file.")
 
 
+def _parse_amount(raw: Optional[str]) -> Optional[int]:
+    """'R30 000 000' / '30,000,000' / '30000000' -> 30000000; blank/junk -> None."""
+    digits = re.sub(r"[^\d]", "", raw or "")
+    return int(digits) if digits else None
+
+
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     cases = memory.all_cases()
@@ -93,16 +106,17 @@ async def assess_route(
     try:
         profile = assess_profile(raw)
         determination = determine_needs(raw)
+        sums = extract_sums(raw)
     except Exception as exc:  # provider/schema failures should be recoverable in the POC UI
         return HTMLResponse(
             render_error("Needs determination could not be completed", str(exc)), status_code=502
         )
     needs_id = uuid.uuid4().hex[:12]
     PENDING_NEEDS[needs_id] = {
-        "determination": determination, "profile": profile,
+        "determination": determination, "profile": profile, "sums": sums,
         "engine": llm.provider(), "raw_text": raw,
     }
-    return HTMLResponse(render_needs(needs_id, determination, profile, llm.provider(), _now()))
+    return HTMLResponse(render_needs(needs_id, determination, profile, llm.provider(), _now(), sums))
 
 
 @app.get("/needs/{needs_id}", response_class=HTMLResponse)
@@ -112,6 +126,7 @@ def resume_needs(needs_id: str) -> HTMLResponse:
         raise HTTPException(status_code=404, detail="Needs determination not found (it may have expired).")
     return HTMLResponse(render_needs(
         needs_id, pending["determination"], pending["profile"], pending["engine"], _now(),
+        pending["sums"],
     ))
 
 
@@ -136,6 +151,16 @@ async def confirm_needs(needs_id: str, request: Request) -> HTMLResponse:
             update["motor_sub_type"] = MotorSubType(raw_sub) if raw_sub else need.motor_sub_type
         confirmed.append(need.model_copy(update=update))
 
+    # The broker's sums insured. The extracted figure is only a pre-fill: what
+    # the form says is what gets priced, and an edited figure drops the
+    # extraction's basis rather than mislabelling the broker's number.
+    confirmed_sums: list[SumInsured] = []
+    for section_id, extracted in pending["sums"].items():
+        field = f"sum_insured_{section_id.value}"
+        amount = _parse_amount(form.get(field)) if field in form else extracted.amount
+        basis = extracted.basis if amount == extracted.amount else "Entered by the broker at the needs gate."
+        confirmed_sums.append(SumInsured(section=section_id, amount=amount, basis=basis if amount is not None else ""))
+
     if not any(n.requirement == Requirement.required for n in confirmed):
         return HTMLResponse(
             render_error("No sections marked required",
@@ -156,7 +181,7 @@ async def confirm_needs(needs_id: str, request: Request) -> HTMLResponse:
     DRAFTS[draft_id] = {
         "draft": draft, "result": result, "engine": engine,
         "raw_text": pending["raw_text"], "needs": confirmed,
-        "usage": llm.usage_summary(),
+        "sums": confirmed_sums, "usage": llm.usage_summary(),
     }
     PENDING_NEEDS.pop(needs_id, None)
     return HTMLResponse(render_review(
@@ -207,19 +232,21 @@ async def approve(request: Request) -> HTMLResponse:
         corrections=corrections,
         final_band=guardrails.band_for_findings(approved),
     )
+    # Deterministic pricing draft from the approved findings and the sums the
+    # broker confirmed at gate 1. Loadings come from the band table; the Price
+    # gate is where the underwriter confirms or overrides them.
+    case.pricing = pricing.price_case(pending["needs"], approved, pending.get("sums", []))
     memory.store(case)
     DRAFTS.pop(draft_id, None)
-    proposal = None
-    learning_note = None
     try:
         proposal = memory.propose_reflection(case)
         if proposal is not None:
             PENDING_LEARNING[case.case_id] = proposal
     except Exception:
-        learning_note = "Case approved. The learning proposal is temporarily unavailable and can be retried later."
-    return HTMLResponse(render_report(
-        case, pending["engine"], _now(), learning_note, proposal
-    ))
+        LEARNING_NOTES[case.case_id] = (
+            "Case approved. The learning proposal is temporarily unavailable and can be retried later."
+        )
+    return RedirectResponse(url=f"/cases/{case.case_id}/pricing", status_code=303)
 
 
 def _apply_review(form, draft_findings, raw_text: str = "") -> tuple:
@@ -267,6 +294,83 @@ def _apply_review(form, draft_findings, raw_text: str = "") -> tuple:
                                       detail="added by reviewer", note=note))
 
     return approved, corrections
+
+
+@app.get("/cases/{case_id}/pricing", response_class=HTMLResponse)
+def pricing_gate(case_id: str) -> HTMLResponse:
+    """Human gate 3: the deterministic premium per required section, loadings
+    confirmable or overridable before the case report is finalised."""
+    case = memory.get_case(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+    if case.pricing is None:
+        # Pre-pricing case (old or chat-ingested): draft a table now. No sums
+        # were confirmed at a needs gate, so every line shows as not priced.
+        case.pricing = pricing.price_case(case.needs, case.approved_findings, [])
+    return HTMLResponse(render_pricing(case, _now()))
+
+
+@app.post("/cases/{case_id}/pricing", response_class=HTMLResponse)
+async def save_case_pricing(case_id: str, request: Request) -> HTMLResponse:
+    case = memory.get_case(case_id)
+    if case is None or case.pricing is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+    form = await request.form()
+
+    # Premiums are recomputed server-side from the stored sums and the current
+    # config — the form only carries the loadings the underwriter settled on.
+    sums = [SumInsured(section=l.section, amount=l.sum_insured, basis=l.basis)
+            for l in case.pricing.lines]
+    overrides: dict = {}
+    for line in case.pricing.lines:
+        raw = (form.get(f"loading_{line.section.value}") or "").strip()
+        if not raw:
+            continue
+        try:
+            overrides[line.section] = float(raw)
+        except ValueError:
+            return HTMLResponse(
+                render_error("Pricing needs attention",
+                             f"The loading for {section(line.section).name} is not a number: {raw!r}.",
+                             f"/cases/{case_id}/pricing"),
+                status_code=400,
+            )
+    case.pricing = pricing.price_case(case.needs, case.approved_findings, sums, overrides)
+    memory.store(case)
+    return HTMLResponse(render_report(
+        case, "stored", _now(), LEARNING_NOTES.pop(case_id, None), PENDING_LEARNING.get(case_id)
+    ))
+
+
+@app.get("/rates", response_class=HTMLResponse)
+def rates_page(saved: int = 0) -> HTMLResponse:
+    return HTMLResponse(render_rates(pricing.load_rates(), pricing.load_loadings(), bool(saved)))
+
+
+@app.post("/rates")
+async def save_rates_config(request: Request) -> Response:
+    form = await request.form()
+    rates = pricing.load_rates()
+    loadings = pricing.load_loadings()
+    try:
+        for section_id, entry in rates.items():
+            raw = (form.get(f"rate_{section_id}") or "").strip()
+            if raw:
+                entry["rate"] = float(raw)
+                if entry["rate"] < 0:
+                    raise ValueError(f"the {section(SectionId(section_id)).name} rate cannot be negative")
+        for band in pricing.BANDS:
+            raw = (form.get(f"loading_{band}") or "").strip()
+            if raw:
+                loadings[band] = float(raw)
+    except ValueError as exc:
+        return HTMLResponse(
+            render_error("Rates need attention", f"Check the values entered: {exc}.", "/rates"),
+            status_code=400,
+        )
+    pricing.save_rates(rates)
+    pricing.save_loadings(loadings)
+    return RedirectResponse(url="/rates?saved=1", status_code=303)
 
 
 @app.post("/learning/{case_id}", response_class=HTMLResponse)
@@ -336,4 +440,5 @@ def reset_demo() -> RedirectResponse:
     PENDING_NEEDS.clear()
     DRAFTS.clear()
     PENDING_LEARNING.clear()
+    LEARNING_NOTES.clear()
     return RedirectResponse(url="/", status_code=303)

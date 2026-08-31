@@ -71,11 +71,11 @@ def test_section_calls_run_concurrently(fake_llm):
     assert {f.section for f in draft.findings} == {SectionId.fire, SectionId.motor}
 
 
-def test_consider_and_not_applicable_sections_are_not_assessed(fake_llm):
+def test_not_applicable_sections_are_not_assessed(fake_llm):
     fake_llm.register(SectionAssessment, SectionAssessment(findings=[_finding()]))
     needs = [
         _need(SectionId.fire),
-        SectionNeed(section=SectionId.motor, requirement=Requirement.consider, reason="fleet size unknown"),
+        SectionNeed(section=SectionId.motor, requirement=Requirement.not_applicable, reason="no vehicles"),
         SectionNeed(section=SectionId.money, requirement=Requirement.not_applicable, reason="no cash handled"),
     ]
     assess_sections(RAW, PROFILE, needs)

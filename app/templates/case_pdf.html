@@ -33,7 +33,14 @@
   .overview td.band-Elevated { background-color: #c65b21; } .overview td.band-High { background-color: #b83c3c; }
   .needs td { border-bottom: 1px solid #eceef3; font-size: 9.5pt; }
   .req { font-weight: bold; font-size: 8.5pt; text-transform: uppercase; }
-  .req-required { color: #b83c3c; } .req-consider { color: #b47913; } .req-not-applicable { color: #9093a0; }
+  .req-required { color: #b83c3c; } .req-not-applicable { color: #9093a0; }
+  .pricing td { border-bottom: 1px solid #eceef3; font-size: 9pt; }
+  .pricing .r { text-align: right; }
+  .pricing .total td { border-top: 2px solid #dfe1e8; border-bottom: 0; font-weight: bold; }
+  .pricing .muted-row td { color: #646875; }
+  .pband-Low { color: #208567; font-weight: bold; } .pband-Moderate { color: #b47913; font-weight: bold; }
+  .pband-Elevated { color: #c65b21; font-weight: bold; } .pband-High { color: #b83c3c; font-weight: bold; }
+  .override { font-size: 7.5pt; color: #765819; }
   .finding td { padding: 8pt 0 10pt 0; border-bottom: 1px solid #eceef3; }
   .finding-title { font-size: 11pt; font-weight: bold; color: #0f1120; }
   .sev { font-size: 8pt; font-weight: bold; text-transform: uppercase; }
@@ -78,7 +85,7 @@
 <h2>Cover sections</h2>
 <table class="needs">
   <tr><th style="width:30%">Section</th><th style="width:18%">Assessment</th><th>Reason</th></tr>
-  {% for need in case.needs %}
+  {% for need in case.needs if need.requirement.value == "required" %}
   <tr>
     <td>{{ section(need.section).name }}{% if need.motor_sub_type %}<br /><span class="small muted">{{ need.motor_sub_type.value|replace("-", " ")|capitalize }}</span>{% endif %}</td>
     <td class="req req-{{ need.requirement.value }}">{{ requirement_labels[need.requirement.value] }}</td>
@@ -105,9 +112,27 @@
 <p class="muted">No risk factors were recorded for this case.</p>
 {% endfor %}
 
+{% if case.pricing and case.pricing.lines %}
+<h2>Premium calculation</h2>
+<p class="small muted">Each premium is calculated deterministically: sum insured &times; base rate &times; band loading. The loading follows the section's assessed risk band; any manual adjustment by the underwriter is disclosed against the band table value.</p>
+<table class="pricing">
+  <tr><th style="width:21%">Section</th><th class="r" style="width:14%">Sum insured</th><th class="r" style="width:8%">Rate</th><th class="r" style="width:14%">Base premium</th><th style="width:11%">Band</th><th class="r" style="width:14%">Loading</th><th class="r" style="width:18%">Adjusted premium</th></tr>
+  {% for line in case.pricing.lines %}
+  {% if line.base_premium is none %}
+  <tr class="muted-row"><td>{{ section(line.section).name }}</td><td class="r">Not stated</td><td class="r">{{ "%.2f"|format(line.rate) }}%</td><td class="r">&mdash;</td><td class="pband-{{ line.band }}">{{ line.band }}</td><td class="r">{{ "%+g"|format(line.table_loading) }}%</td><td class="r">Not priced &mdash; sum insured not provided</td></tr>
+  {% else %}
+  <tr><td>{{ section(line.section).name }}</td><td class="r">{{ line.sum_insured|rand|replace(" ", "&nbsp;")|safe }}</td><td class="r">{{ "%.2f"|format(line.rate) }}%</td><td class="r">{{ line.base_premium|rand|replace(" ", "&nbsp;")|safe }}</td><td class="pband-{{ line.band }}">{{ line.band }}</td><td class="r">{{ "%+g"|format(line.applied_loading) }}%{% if line.overridden %}<br /><span class="override">manual &mdash; band table: {{ "%+g"|format(line.table_loading) }}%</span>{% endif %}</td><td class="r">{{ line.adjusted_premium|rand|replace(" ", "&nbsp;")|safe }}</td></tr>
+  {% endif %}
+  {% endfor %}
+  <tr class="total"><td>Total, per annum</td><td>&nbsp;</td><td>&nbsp;</td><td class="r">{{ case.pricing.base_total|rand|replace(" ", "&nbsp;")|safe }}</td><td>&nbsp;</td><td>&nbsp;</td><td class="r">{{ case.pricing.adjusted_total|rand|replace(" ", "&nbsp;")|safe }}</td></tr>
+</table>
+{% endif %}
+
 <div class="disclaimer">
-  This report records a risk assessment reviewed and approved by an underwriter. It is not a quotation,
-  does not constitute cover, and states no premium, rate or sum insured.
+  This report records a risk assessment reviewed and approved by an underwriter.
+  {% if case.pricing and case.pricing.lines %}Premiums shown are indicative, calculated deterministically from broker-supplied
+  base rates and the assessed risk band; they are not a binding quotation and do not constitute cover.{% else %}It is not a
+  quotation, does not constitute cover, and states no premium, rate or sum insured.{% endif %}
   Converge AI (Pty) Ltd · Johannesburg, South Africa · convergeai.co.za
 </div>
 
