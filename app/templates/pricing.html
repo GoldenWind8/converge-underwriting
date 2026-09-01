@@ -75,7 +75,7 @@
             <td></td>
             <td class="sec" style="color:var(--ink)">{{ cover.number }}. {{ cover.name }}</td>
             <td class="r" style="font-size:12px">Not stated at the needs gate</td>
-            <td class="r">{{ "%.2f"|format(line.rate) }}%</td>
+            <td class="r">{{ "%g"|format(line.rate) }}%</td>
             <td class="r">—</td>
             <td><span class="band {{ line.band }}">{{ line.band }}</span></td>
             <td class="muted">{{ "%+g"|format(line.table_loading) }}%</td>
@@ -86,7 +86,7 @@
             <td><button class="row-toggle" type="button" aria-label="Show justification for {{ cover.name }}" aria-expanded="false">▸</button></td>
             <td class="sec">{{ cover.number }}. {{ cover.name }}</td>
             <td class="r">{{ line.sum_insured|rand }}</td>
-            <td class="r">{{ "%.2f"|format(line.rate) }}%</td>
+            <td class="r">{{ "%g"|format(line.rate) }}%</td>
             <td class="r">{{ line.base_premium|rand }}</td>
             <td><span class="band {{ line.band }}">{{ line.band }}</span></td>
             <td><div class="loading-cell">

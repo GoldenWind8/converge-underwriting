@@ -32,27 +32,31 @@ from .sections import SectionId, section
 
 BANDS = ["Low", "Moderate", "Elevated", "High"]
 
-# Placeholder base rates: annual % of sum insured, flat per section.
-# "basis" says what figure the rate applies to — shown on the Rates page.
+# Base rates: annual % of sum insured, flat per section. Sourced from the
+# broker's rate sheet of 2026-09-01 ("base rates" at the repo root); ranges
+# entered at their midpoint — the band loading covers the spread the broker
+# prices by feel. "basis" says what figure the rate applies to plus any caveat
+# from the sheet — shown on the Rates page. Sections the sheet left blank
+# carry a placeholder, marked as such.
 DEFAULT_RATES: Dict[str, dict] = {
-    "buildings-combined": {"rate": 0.15, "basis": "Building value"},
-    "fire": {"rate": 0.40, "basis": "Plant, stock and contents"},
-    "business-interruption": {"rate": 0.35, "basis": "Gross profit"},
-    "office-contents": {"rate": 0.50, "basis": "Contents value"},
-    "glass": {"rate": 1.00, "basis": "Replacement value"},
-    "accounts-receivable": {"rate": 0.30, "basis": "Debtors outstanding"},
-    "fidelity": {"rate": 0.50, "basis": "Limit of indemnity"},
-    "theft": {"rate": 1.50, "basis": "Stock at risk"},
-    "money": {"rate": 2.00, "basis": "Maximum cash on premises"},
-    "goods-in-transit": {"rate": 1.00, "basis": "Maximum load per vehicle"},
-    "electronic-equipment": {"rate": 1.20, "basis": "Equipment value"},
-    "business-all-risks": {"rate": 2.50, "basis": "Portable items value"},
-    "group-personal-accident": {"rate": 0.80, "basis": "Aggregate benefit"},
-    "motor": {"rate": 4.00, "basis": "Fleet value"},
-    "motor-traders": {"rate": 3.00, "basis": "Vehicles in custody"},
-    "public-liability": {"rate": 0.10, "basis": "Limit of indemnity"},
-    "broadform-liability": {"rate": 0.12, "basis": "Limit of indemnity"},
-    "umbrella-liability": {"rate": 0.05, "basis": "Limit of indemnity"},
+    "buildings-combined": {"rate": 0.20, "basis": "Building value — assumed at the Fire and Allied Perils rate; confirm with broker"},
+    "fire": {"rate": 0.20, "basis": "Plant, stock and contents (Fire and Allied Perils)"},
+    "business-interruption": {"rate": 0.20, "basis": "Gross profit — 12 to 24 month indemnity; shorter periods: 25% of the Fire rate"},
+    "office-contents": {"rate": 2.00, "basis": "Contents value — forcible/violent-entry theft extension rated at 5%"},
+    "glass": {"rate": 6.50, "basis": "Replacement value (sheet range 5–8%)"},
+    "accounts-receivable": {"rate": 0.30, "basis": "Debtors outstanding — placeholder; awaiting broker rate"},
+    "fidelity": {"rate": 0.50, "basis": "Limit of indemnity — placeholder; broker rates on sum insured and employee count"},
+    "theft": {"rate": 9.00, "basis": "Stock at risk, typically a first-loss limit (sheet range 8–10%)"},
+    "money": {"rate": 8.00, "basis": "Maximum cash on premises"},
+    "goods-in-transit": {"rate": 9.00, "basis": "Maximum load per vehicle (sheet range 8–10%)"},
+    "electronic-equipment": {"rate": 7.50, "basis": "Equipment value (sheet range 5–10%; laptops 10–12%)"},
+    "business-all-risks": {"rate": 7.50, "basis": "Portable items value (sheet range 5–10%)"},
+    "group-personal-accident": {"rate": 0.80, "basis": "Aggregate benefit — placeholder; awaiting broker rate"},
+    "motor": {"rate": 4.00, "basis": "Fleet value — placeholder; broker rates vary by sum insured"},
+    "motor-traders": {"rate": 3.00, "basis": "Vehicles in custody — placeholder; awaiting broker rate"},
+    "public-liability": {"rate": 0.00833, "basis": "Limit of indemnity — R83.33 per R1 000 000 (Public and Employees Liability)"},
+    "broadform-liability": {"rate": 0.01, "basis": "Limit of indemnity — placeholder; sheet rates Public and Employees Liability together"},
+    "umbrella-liability": {"rate": 0.005, "basis": "Limit of indemnity — placeholder; awaiting broker rate"},
 }
 
 DEFAULT_LOADINGS: Dict[str, float] = {

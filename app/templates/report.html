@@ -70,9 +70,9 @@
           <tbody>
             {% for line in case.pricing.lines %}
             {% if line.base_premium is none %}
-            <tr class="unpriced"><td>{{ section(line.section).name }}</td><td class="r">Not stated</td><td class="r">{{ "%.2f"|format(line.rate) }}%</td><td class="r">—</td><td><span class="band {{ line.band }}">{{ line.band }}</span></td><td class="r">{{ "%+g"|format(line.table_loading) }}%</td><td class="r">Not priced</td></tr>
+            <tr class="unpriced"><td>{{ section(line.section).name }}</td><td class="r">Not stated</td><td class="r">{{ "%g"|format(line.rate) }}%</td><td class="r">—</td><td><span class="band {{ line.band }}">{{ line.band }}</span></td><td class="r">{{ "%+g"|format(line.table_loading) }}%</td><td class="r">Not priced</td></tr>
             {% else %}
-            <tr><td>{{ section(line.section).name }}</td><td class="r">{{ line.sum_insured|rand }}</td><td class="r">{{ "%.2f"|format(line.rate) }}%</td><td class="r">{{ line.base_premium|rand }}</td><td><span class="band {{ line.band }}">{{ line.band }}</span></td><td class="r">{{ "%+g"|format(line.applied_loading) }}%{% if line.overridden %}<span class="override-note">manual — band table: {{ "%+g"|format(line.table_loading) }}%</span>{% endif %}</td><td class="r">{{ line.adjusted_premium|rand }}</td></tr>
+            <tr><td>{{ section(line.section).name }}</td><td class="r">{{ line.sum_insured|rand }}</td><td class="r">{{ "%g"|format(line.rate) }}%</td><td class="r">{{ line.base_premium|rand }}</td><td><span class="band {{ line.band }}">{{ line.band }}</span></td><td class="r">{{ "%+g"|format(line.applied_loading) }}%{% if line.overridden %}<span class="override-note">manual — band table: {{ "%+g"|format(line.table_loading) }}%</span>{% endif %}</td><td class="r">{{ line.adjusted_premium|rand }}</td></tr>
             {% endif %}
             {% endfor %}
             <tr class="total"><td>Total · annual</td><td></td><td></td><td class="r">{{ case.pricing.base_total|rand }}</td><td></td><td></td><td class="r">{{ case.pricing.adjusted_total|rand }}</td></tr>

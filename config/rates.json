@@ -1,74 +1,74 @@
 {
   "buildings-combined": {
-    "rate": 0.15,
-    "basis": "Building value"
+    "rate": 0.2,
+    "basis": "Building value \u2014 assumed at the Fire and Allied Perils rate; confirm with broker"
   },
   "fire": {
-    "rate": 0.4,
-    "basis": "Plant, stock and contents"
+    "rate": 0.2,
+    "basis": "Plant, stock and contents (Fire and Allied Perils)"
   },
   "business-interruption": {
-    "rate": 0.35,
-    "basis": "Gross profit"
+    "rate": 0.2,
+    "basis": "Gross profit \u2014 12 to 24 month indemnity; shorter periods: 25% of the Fire rate"
   },
   "office-contents": {
-    "rate": 0.5,
-    "basis": "Contents value"
+    "rate": 2.0,
+    "basis": "Contents value \u2014 forcible/violent-entry theft extension rated at 5%"
   },
   "glass": {
-    "rate": 1.0,
-    "basis": "Replacement value"
+    "rate": 6.5,
+    "basis": "Replacement value (sheet range 5\u20138%)"
   },
   "accounts-receivable": {
     "rate": 0.3,
-    "basis": "Debtors outstanding"
+    "basis": "Debtors outstanding \u2014 placeholder; awaiting broker rate"
   },
   "fidelity": {
     "rate": 0.5,
-    "basis": "Limit of indemnity"
+    "basis": "Limit of indemnity \u2014 placeholder; broker rates on sum insured and employee count"
   },
   "theft": {
-    "rate": 1.5,
-    "basis": "Stock at risk"
+    "rate": 9.0,
+    "basis": "Stock at risk, typically a first-loss limit (sheet range 8\u201310%)"
   },
   "money": {
-    "rate": 2.0,
+    "rate": 8.0,
     "basis": "Maximum cash on premises"
   },
   "goods-in-transit": {
-    "rate": 1.0,
-    "basis": "Maximum load per vehicle"
+    "rate": 9.0,
+    "basis": "Maximum load per vehicle (sheet range 8\u201310%)"
   },
   "electronic-equipment": {
-    "rate": 1.2,
-    "basis": "Equipment value"
+    "rate": 7.5,
+    "basis": "Equipment value (sheet range 5\u201310%; laptops 10\u201312%)"
   },
   "business-all-risks": {
-    "rate": 2.5,
-    "basis": "Portable items value"
+    "rate": 7.5,
+    "basis": "Portable items value (sheet range 5\u201310%)"
   },
   "group-personal-accident": {
     "rate": 0.8,
-    "basis": "Aggregate benefit"
+    "basis": "Aggregate benefit \u2014 placeholder; awaiting broker rate"
   },
   "motor": {
     "rate": 4.0,
-    "basis": "Fleet value"
+    "basis": "Fleet value \u2014 placeholder; broker rates vary by sum insured"
   },
   "motor-traders": {
     "rate": 3.0,
-    "basis": "Vehicles in custody"
+    "basis": "Vehicles in custody \u2014 placeholder; awaiting broker rate"
   },
   "public-liability": {
-    "rate": 0.1,
-    "basis": "Limit of indemnity"
+    "rate": 0.00833,
+    "basis": "Limit of indemnity \u2014 R83.33 per R1 000 000 (Public and Employees Liability)"
   },
   "broadform-liability": {
-    "rate": 0.12,
-    "basis": "Limit of indemnity"
+    "rate": 0.01,
+    "basis": "Limit of indemnity \u2014 placeholder; sheet rates Public and Employees Liability together"
   },
   "umbrella-liability": {
-    "rate": 0.05,
-    "basis": "Limit of indemnity"
+    "rate": 0.005,
+    "basis": "Limit of indemnity \u2014 placeholder; awaiting broker rate"
   }
 }

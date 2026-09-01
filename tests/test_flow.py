@@ -81,7 +81,7 @@ def test_full_flow_through_all_gates(fake_llm):
     })
     assert response.status_code == 200
     assert "Pricing engine" in response.text, "approval lands on the Price gate"
-    assert "R 4 000" in response.text  # 1m x 0.40% fire base premium
+    assert "R 2 000" in response.text  # 1m x 0.20% fire base premium
 
     # Gate 3: override the fire loading (band table says +25) and save.
     response = client.post("/cases/C-0001/pricing", data={"loading_fire": "30"})
@@ -100,11 +100,11 @@ def test_full_flow_through_all_gates(fake_llm):
     fire_line = next(l for l in case.pricing.lines if l.section == SectionId.fire)
     assert fire_line.band == "High"
     assert fire_line.sum_insured == 1_000_000
-    assert fire_line.base_premium == 4_000
+    assert fire_line.base_premium == 2_000
     assert fire_line.table_loading == 25 and fire_line.applied_loading == 30
     assert fire_line.overridden
-    assert fire_line.adjusted_premium == 5_200
-    assert case.pricing.adjusted_total == 5_200
+    assert fire_line.adjusted_premium == 2_600
+    assert case.pricing.adjusted_total == 2_600
 
 
 def test_confirming_needs_with_nothing_required_is_rejected(fake_llm):

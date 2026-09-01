@@ -27,7 +27,7 @@
             <tr>
               <td class="muted">{{ cover.number }}</td>
               <td class="rate-name">{{ cover.name }}</td>
-              <td style="text-align:right"><input type="number" step="0.01" min="0" name="rate_{{ cover.id.value }}" value="{{ "%.2f"|format(entry.rate) }}" aria-label="Rate for {{ cover.name }}" /></td>
+              <td style="text-align:right"><input type="number" step="any" min="0" name="rate_{{ cover.id.value }}" value="{{ "%g"|format(entry.rate) }}" aria-label="Rate for {{ cover.name }}" /></td>
               <td class="muted" style="font-size:12px">{{ entry.basis }}</td>
             </tr>
             {% endfor %}
