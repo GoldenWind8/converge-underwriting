@@ -77,7 +77,7 @@
             <td class="r" style="font-size:12px">Not stated at the needs gate</td>
             <td class="r">{{ "%g"|format(line.rate) }}%</td>
             <td class="r">—</td>
-            <td><span class="band {{ line.band }}">{{ line.band }}</span><div class="hint">{{ "%.2f"|format(line.risk_score) }} pts</div></td>
+            <td><span class="band {{ line.band }}">{{ line.band }}</span></td>
             <td class="muted">{{ "%+g"|format(line.table_loading) }}%</td>
             <td class="r">Not priced</td>
           </tr>
@@ -88,7 +88,7 @@
             <td class="r">{{ line.sum_insured|rand }}</td>
             <td class="r">{{ "%g"|format(line.rate) }}%</td>
             <td class="r">{{ line.base_premium|rand }}</td>
-            <td><span class="band {{ line.band }}">{{ line.band }}</span><div class="hint">{{ "%.2f"|format(line.risk_score) }} pts</div></td>
+            <td><span class="band {{ line.band }}">{{ line.band }}</span></td>
             <td><div class="loading-cell">
               <input type="number" step="1" name="loading_{{ line.section.value }}" value="{{ "%g"|format(line.applied_loading) }}" aria-label="Loading percent for {{ cover.name }}" />
               <span class="unit">%</span>
@@ -98,14 +98,13 @@
           </tr>
           <tr class="why" hidden>
             <td colspan="8">
-              <div class="why-line"><span class="adj-word">{% if line.applied_loading > 0 %}Loaded +{{ "%g"|format(line.applied_loading) }}%{% elif line.applied_loading < 0 %}Discounted {{ "%g"|format(line.applied_loading) }}%{% else %}No adjustment{% endif %}</span> — rated {{ line.band }} ({{ "%.2f"|format(line.risk_score) }} pts)<span class="pill manual table-note" {% if not line.overridden %}hidden{% endif %}>manual — band table: {{ "%+g"|format(line.table_loading) }}%</span></div>
-              {% if line.score_explanation %}<div class="hint" style="margin-bottom:6px">{{ line.score_explanation }}</div>{% endif %}
+              <div class="why-line"><span class="adj-word">{% if line.applied_loading > 0 %}Loaded +{{ "%g"|format(line.applied_loading) }}%{% elif line.applied_loading < 0 %}Discounted {{ "%g"|format(line.applied_loading) }}%{% else %}No adjustment{% endif %}</span> — rated {{ line.band }}<span class="pill manual table-note" {% if not line.overridden %}hidden{% endif %}>manual — band table: {{ "%+g"|format(line.table_loading) }}%</span></div>
               {% if line.basis %}<div class="hint" style="margin-bottom:6px">Sum insured basis: {{ line.basis }}</div>{% endif %}
               <ul>
                 {% for f in findings_by_section.get(line.section, []) %}
                 <li><span class="mono">{{ f.factor_name }}</span> <span class="severity {{ f.severity.value }}">{{ f.severity.value }}</span></li>
                 {% else %}
-                <li class="muted">No approved findings in this section — score 0.00, banded Low.</li>
+                <li class="muted">No approved findings in this section — banded Low.</li>
                 {% endfor %}
               </ul>
             </td>

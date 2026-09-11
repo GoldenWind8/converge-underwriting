@@ -3,8 +3,8 @@ import os
 import re
 from pathlib import Path
 
-from app.guardrails import (GuardrailResult, band_rule_text,
-                            load_scoring_config, score_findings)
+from app.guardrails import (GuardrailResult, load_scoring_config,
+                            score_findings)
 from app.memory import LearningProposal
 from app.models import (CasePricing, CaseRecord, ClientProfile, Correction,
                         NeedsDetermination, PricedSection, Requirement,
@@ -65,15 +65,17 @@ def test_review_workspace_renders_sections_and_why_note():
 
     assert 'id="source-document"' in html
     assert 'id="live-band"' in html
-    assert 'id="live-score"' in html
+    assert 'id="live-score"' not in html
     assert "2. Fire" in html and "3. Business Interruption" in html
     assert 'href="/cases/C-0001"' in html
     assert 'href="/playbook#PB-001"' in html
     assert 'name="new_evidence_quote"' in html
     assert 'name="note_0"' in html, "the why-note input must be on every finding"
     assert "3 model call(s)" in html
-    assert 'id="live-score">62.50</span>' in html, "the scored value itself must be rendered"
-    assert band_rule_text() in html, "the surface states the rule it was scored by"
+    assert "62.50" not in html and 'id="live-score"' not in html, (
+        "numeric risk scores stay off the review surface"
+    )
+    assert "Draft referral band" in html
 
 
 def test_report_renders_needs_rationale_and_reviewer_notes():
@@ -145,14 +147,18 @@ def test_review_recalc_is_handed_the_config_the_server_bands_with():
     assert _injected(html, "SEVERITY_POINTS") == points
     assert [(r["band"], r["lo"], r["hi"])
             for r in _injected(html, "BAND_THRESHOLDS")] == thresholds
-    assert 'id="live-score">80.00</span>' in html
-    assert band_rule_text() in html
+    assert 'id="live-band">High</span>' in html or 'id="live-band" class="band High">High' in html or (
+        'id="live-band"' in html and scored.band in html
+    )
+    assert "80.00" not in html and "live-score" not in html, (
+        "the numeric score stays internal even when config is retuned"
+    )
     assert "62.5" not in html, "no default point value may survive a tuned config"
 
 
-def test_report_shows_the_section_score_behind_each_loading():
-    """The header states a case score; each priced section states the score that
-    picked its own loading, so the report explains every number it shows."""
+def test_report_shows_section_bands_not_numeric_scores():
+    """The report shows referral bands and findings; the mean that picked the
+    band stays on the backend."""
     case = CaseRecord(
         case_id="C-0003", created_at="2026-08-07T10:00:00", source="assessment",
         client_profile=PROFILE, summary=PROFILE.summary, needs=NEEDS,
@@ -169,4 +175,7 @@ def test_report_shows_the_section_score_behind_each_loading():
 
     html = render_report(case, "fake", "2026-08-07 10:00")
 
-    assert "62.50 pts" in html
+    assert 'class="band Elevated"' in html or ">Elevated<" in html
+    assert "62.50" not in html and "pts" not in html
+    assert "Referral band" in html
+    assert "uncertified_gas" in html

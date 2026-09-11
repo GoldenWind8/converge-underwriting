@@ -63,8 +63,9 @@ def test_pdf_shows_the_premium_table_and_discloses_overrides():
     assert "band table: +10%" in html, "a manual override is disclosed against the table value"
     assert "Not priced" in html and "sum insured not provided" in html
     assert "not a binding quotation" in html
-    # Each loading is justified by the section score that produced its band.
-    assert "62.50 pts" in html and "12.50 pts" in html
+    # Bands drive loadings; numeric scores stay off the client PDF.
+    assert "Elevated" in html and "Low" in html
+    assert "62.50" not in html and "12.50" not in html and "pts" not in html
 
 
 def test_case_pdf_produces_a_pdf():

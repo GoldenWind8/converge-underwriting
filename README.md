@@ -46,15 +46,17 @@ raw input ─▶ PROFILE ─▶ NEEDS DETERMINATION ─▶ GATE 1: confirm secti
   unverifiable citations are removed, and each finding's severity maps to points
   (low 12.5 / medium 37.5 / high 62.5 / severe 87.5). The risk score for a cover
   section (and for the case) is the **equal-weight mean** of those points; the
-  band is Low / Moderate / Elevated / High from thresholds on that mean. Severe /
-  novel / low-confidence findings are referred to a human. The LLM emits
+  band is Low / Moderate / Elevated / High from thresholds on that mean. The
+  score informs banding and pricing only — the UI shows the **band** and the
+  findings (risk metrics), not the numeric score. Severe / novel /
+  low-confidence findings are referred to a human. The LLM emits
   **severity only — never a free-form score or a price**. Config lives in
   `config/severity_points.json`. Exact rules:
   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#what-guards-what).
 - **Human review** — a split-screen decision workspace (gate 2) links each finding to
-  its source evidence, recomputes the live score and band, and captures the
-  reviewer's own "why" note verbatim on every edit. Only approved cases ever enter
-  memory.
+  its source evidence, recomputes the referral band live (score stays internal), and
+  captures the reviewer's own "why" note verbatim on every edit. Only approved cases
+  ever enter memory.
 - **Price** — a deterministic engine, no LLM (gate 3): per required section,
   `sum insured × base rate × (1 + band loading)`, quoting both the base and the
   adjusted premium with the findings that set the band as justification. Base rates
