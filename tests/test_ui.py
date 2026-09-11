@@ -41,7 +41,8 @@ def test_review_workspace_renders_sections_and_why_note():
         "factor_name": "gas_bi_dependency", "section": SectionId.business_interruption,
     })
     draft = RiskAssessmentDraft(client_profile=PROFILE, findings=[FINDING, second])
-    result = GuardrailResult(findings=[FINDING, second], band="Elevated")
+    result = GuardrailResult(findings=[FINDING, second], band="Elevated", risk_score=62.5,
+                             score_explanation="test")
 
     html = render_review(
         "draft-1", draft, result, "fake", "2026-08-07 10:00",
@@ -51,13 +52,15 @@ def test_review_workspace_renders_sections_and_why_note():
 
     assert 'id="source-document"' in html
     assert 'id="live-band"' in html
+    assert 'id="live-score"' in html
     assert "2. Fire" in html and "3. Business Interruption" in html
     assert 'href="/cases/C-0001"' in html
     assert 'href="/playbook#PB-001"' in html
     assert 'name="new_evidence_quote"' in html
     assert 'name="note_0"' in html, "the why-note input must be on every finding"
     assert "3 model call(s)" in html
-    assert "points" not in html.lower(), "no score anywhere on the review surface"
+    assert "points" in html.lower(), "the live risk score is shown on the review surface"
+    assert "equal-weight mean" in html
 
 
 def test_report_renders_needs_rationale_and_reviewer_notes():

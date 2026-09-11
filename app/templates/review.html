@@ -60,7 +60,7 @@
     <div><div class="eyebrow">Human decision workspace · Gate 2</div><h1>{{ draft.client_profile.business_name or "Unnamed applicant" }}</h1><p class="sub" style="margin:0">{{ draft.client_profile.industry or "Industry not identified" }} · Drafted by {{ engine }} · {{ generated_at }}</p></div>
     <div class="page-actions">
       <div class="stepper"><span class="step done"><span class="step-num">✓</span>Submit</span><span class="step done"><span class="step-num">✓</span>Needs</span><span class="step active"><span class="step-num">3</span>Review</span><span class="step"><span class="step-num">4</span>Price</span><span class="step"><span class="step-num">5</span>Learn</span></div>
-      <div class="band-summary"><div class="hint">Draft referral band<br><span style="font-size:10px">severity-derived · no score</span></div><span class="band {{ result.band }}" id="live-band">{{ result.band }}</span></div>
+      <div class="band-summary"><div class="hint">Draft risk score<br><span style="font-size:10px">equal-weight mean · 0–100</span></div><div style="text-align:right"><span class="band {{ result.band }}" id="live-band">{{ result.band }}</span><div class="hint" style="margin-top:4px"><span id="live-score">{{ "%.2f"|format(result.risk_score) }}</span> points</div></div></div>
     </div>
   </div>
 
@@ -145,21 +145,27 @@
 {% endblock %}
 {% block scripts %}
 <script>
-  // Deterministic band rule, mirrored from guardrails.band_for_findings:
-  // High: any severe, or 3+ high. Elevated: any high, or 3+ medium. Moderate: any medium.
-  function bandFor(counts){
-    if(counts.severe>=1||counts.high>=3)return 'High';
-    if(counts.high>=1||counts.medium>=3)return 'Elevated';
-    if(counts.medium>=1)return 'Moderate';
-    return 'Low';
+  // Mirrored from guardrails.score_findings: equal-weight mean of severity
+  // midpoints, then threshold bands (half-open except High includes 100).
+  const SEVERITY_POINTS = {low: 12.5, medium: 37.5, high: 62.5, severe: 87.5};
+  function bandForScore(score){
+    if(score < 25) return 'Low';
+    if(score < 50) return 'Moderate';
+    if(score < 75) return 'Elevated';
+    return 'High';
   }
   function recalc(){
-    const counts={low:0,medium:0,high:0,severe:0};
+    const points=[];
     document.querySelectorAll('.finding-card').forEach(card=>{
-      if(card.querySelector('.keep').checked)counts[card.querySelector('.severity-input').value]++;
+      if(card.querySelector('.keep').checked){
+        points.push(SEVERITY_POINTS[card.querySelector('.severity-input').value]);
+      }
     });
-    const band=bandFor(counts),el=document.getElementById('live-band');
-    el.textContent=band;el.className='band '+band;
+    const score = points.length ? points.reduce((a,b)=>a+b,0)/points.length : 0;
+    const band = bandForScore(score);
+    const el=document.getElementById('live-band');
+    el.textContent=band; el.className='band '+band;
+    document.getElementById('live-score').textContent=score.toFixed(2);
   }
   document.querySelectorAll('.keep,.severity-input').forEach(el=>el.addEventListener('input',recalc));
   const source=document.getElementById('source-document'),original=source.textContent;

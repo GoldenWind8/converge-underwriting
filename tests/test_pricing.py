@@ -29,6 +29,18 @@ def test_band_for_section_is_the_case_rule_scoped_to_one_section():
     assert band_for_section([_finding(SectionId.fire, Severity.medium)]) == "Moderate"
 
 
+def test_price_case_carries_section_risk_score():
+    result = pricing.price_case(
+        needs=[_need(SectionId.fire)],
+        findings=[_finding(SectionId.fire, Severity.severe)],
+        sums=[SumInsured(section=SectionId.fire, amount=1_000_000)],
+    )
+    line = result.lines[0]
+    assert line.risk_score == 87.5
+    assert line.band == "High"
+    assert "87.5" in line.score_explanation
+
+
 def test_price_case_computes_base_and_adjusted_premiums():
     pricing.save_rates({**pricing.DEFAULT_RATES, "fire": {"rate": 0.40, "basis": "x"}})
     pricing.save_loadings({"Low": -10, "Moderate": 0, "Elevated": 10, "High": 25})

@@ -10,17 +10,21 @@ No LLM here — an underwriter can reproduce everything in this file by hand.
      appearing somewhere in a form is not evidence of anything.
   2. Citation allow-list — precedent/rule citations not actually supplied to
      the model are removed and referred.
-  3. Band mapping — the severity profile -> referral band. Categorical only;
-     there is deliberately no score anywhere in this system.
+  3. Risk score + band — each finding maps to points from its severity
+     (config/severity_points.json); the bucket score is the equal-weight mean;
+     the band is a threshold lookup over that mean (0–100).
   4. Referral triggers — low confidence, novel findings, and severe findings
      go to a human.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import re
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from pathlib import Path
+from typing import Dict, List, Tuple
 
 from .models import (SEVERITY_ORDER, RiskAssessmentDraft, RiskFinding,
                      Severity)
@@ -36,15 +40,36 @@ STOPWORDS = {
     "to", "in", "on", "at", "for", "is", "are", "was", "not", "with",
 }
 
-# Deterministic band rule, checked top-down. Reproducible by hand:
-#   High      any severe finding, or three or more high
-#   Elevated  any high finding, or three or more medium
-#   Moderate  any medium finding
-#   Low       otherwise
+# Defaults mirror config/severity_points.json — midpoints of each display band.
+DEFAULT_SEVERITY_POINTS: Dict[str, float] = {
+    "low": 12.5,
+    "medium": 37.5,
+    "high": 62.5,
+    "severe": 87.5,
+}
+
+# Half-open [lo, hi) except High includes 100.
+DEFAULT_THRESHOLDS: List[Tuple[str, float, float]] = [
+    ("Low", 0.0, 25.0),
+    ("Moderate", 25.0, 50.0),
+    ("Elevated", 50.0, 75.0),
+    ("High", 75.0, 100.0),
+]
+
 BAND_RULE_TEXT = (
-    "High: any severe finding, or 3+ high. Elevated: any high, or 3+ medium. "
-    "Moderate: any medium. Low: otherwise."
+    "Equal-weight mean of severity points (low=12.5, medium=37.5, high=62.5, "
+    "severe=87.5); Low [0,25), Moderate [25,50), Elevated [50,75), High [75,100]."
 )
+
+
+@dataclass
+class ScoreBreakdown:
+    """Hand-reproducible working for one risk bucket (section or whole case)."""
+
+    risk_score: float
+    band: str
+    finding_points: List[Tuple[str, str, float]] = field(default_factory=list)
+    explanation: str = ""
 
 
 @dataclass
@@ -52,21 +77,107 @@ class GuardrailResult:
     findings: List[RiskFinding] = field(default_factory=list)
     dropped: List[Tuple[RiskFinding, str]] = field(default_factory=list)
     band: str = "Low"
+    risk_score: float = 0.0
+    score_explanation: str = ""
     referrals: List[str] = field(default_factory=list)
     invalid_citations: List[str] = field(default_factory=list)
 
 
-def band_for_findings(findings: List[RiskFinding]) -> str:
-    counts = {s: 0 for s in Severity}
+def _config_dir() -> Path:
+    return Path(os.environ.get("UW_CONFIG_DIR", Path(__file__).resolve().parent.parent / "config"))
+
+
+def load_severity_points() -> Dict[str, float]:
+    """Severity → points map. Missing keys fall back to the documented defaults."""
+    path = _config_dir() / "severity_points.json"
+    points = dict(DEFAULT_SEVERITY_POINTS)
+    if path.exists():
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        for key, value in (raw.get("points") or {}).items():
+            points[str(key)] = float(value)
+    return points
+
+
+def load_thresholds() -> List[Tuple[str, float, float]]:
+    """Ordered (band, lo, hi) rows. High is inclusive of 100."""
+    path = _config_dir() / "severity_points.json"
+    if not path.exists():
+        return list(DEFAULT_THRESHOLDS)
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    thresholds = raw.get("thresholds") or {}
+    if not thresholds:
+        return list(DEFAULT_THRESHOLDS)
+    order = ["Low", "Moderate", "Elevated", "High"]
+    rows: List[Tuple[str, float, float]] = []
+    for band in order:
+        pair = thresholds.get(band)
+        if pair is None or len(pair) != 2:
+            raise ValueError(f"severity_points.json thresholds.{band} must be [lo, hi]")
+        rows.append((band, float(pair[0]), float(pair[1])))
+    return rows
+
+
+def points_for_severity(severity: Severity, points: Dict[str, float] | None = None) -> float:
+    table = points or load_severity_points()
+    return float(table[severity.value])
+
+
+def band_for_score(score: float, thresholds: List[Tuple[str, float, float]] | None = None) -> str:
+    """Map a 0–100 score onto Low / Moderate / Elevated / High."""
+    rows = thresholds or load_thresholds()
+    s = float(score)
+    for band, lo, hi in rows:
+        if band == "High":
+            if lo <= s <= hi:
+                return band
+        elif lo <= s < hi:
+            return band
+    if s < 0:
+        return "Low"
+    return "High"
+
+
+def score_findings(findings: List[RiskFinding]) -> ScoreBreakdown:
+    """Equal-weight mean of severity points → band. Empty bucket scores 0 (Low)."""
+    points_table = load_severity_points()
+    thresholds = load_thresholds()
+    finding_points: List[Tuple[str, str, float]] = []
     for f in findings:
-        counts[f.severity] += 1
-    if counts[Severity.severe] >= 1 or counts[Severity.high] >= 3:
-        return "High"
-    if counts[Severity.high] >= 1 or counts[Severity.medium] >= 3:
-        return "Elevated"
-    if counts[Severity.medium] >= 1:
-        return "Moderate"
-    return "Low"
+        pts = points_for_severity(f.severity, points_table)
+        finding_points.append((f.factor_name, f.severity.value, pts))
+
+    if not finding_points:
+        explanation = (
+            "No findings in this bucket — score 0.00 → Low "
+            "(empty buckets are not priced as risk)."
+        )
+        return ScoreBreakdown(risk_score=0.0, band="Low", finding_points=[], explanation=explanation)
+
+    total = sum(pts for _, _, pts in finding_points)
+    n = len(finding_points)
+    mean = total / n
+    band = band_for_score(mean, thresholds)
+    parts = "; ".join(
+        f"{name} ({sev} → {pts:g})" for name, sev, pts in finding_points
+    )
+    explanation = (
+        f"Equal-weight mean of {n} finding(s): ({parts}) "
+        f"= {total:g} / {n} = {mean:.2f} → {band}."
+    )
+    return ScoreBreakdown(
+        risk_score=mean,
+        band=band,
+        finding_points=finding_points,
+        explanation=explanation,
+    )
+
+
+def band_for_findings(findings: List[RiskFinding]) -> str:
+    return score_findings(findings).band
+
+
+def score_for_findings(findings: List[RiskFinding]) -> float:
+    return score_findings(findings).risk_score
 
 
 def band_for_section(findings: List[RiskFinding]) -> str:
@@ -76,9 +187,12 @@ def band_for_section(findings: List[RiskFinding]) -> str:
     surface that shows a per-section band call this and nothing else, so a
     future refinement — e.g. crediting mitigation factors to offset a single
     worst finding — changes this function and nothing downstream of it.
-    Today it applies the same deterministic count rule as the case band.
     """
-    return band_for_findings(findings)
+    return score_findings(findings).band
+
+
+def score_for_section(findings: List[RiskFinding]) -> float:
+    return score_findings(findings).risk_score
 
 
 def _normalise(text: str) -> str:
@@ -135,7 +249,10 @@ def apply(draft: RiskAssessmentDraft, raw_text: str) -> GuardrailResult:
 
     # Section order first (as the needs analysis lists them), worst first within.
     result.findings.sort(key=lambda f: (section(f.section).number, -SEVERITY_ORDER[f.severity]))
-    result.band = band_for_findings(result.findings)
+    scored = score_findings(result.findings)
+    result.band = scored.band
+    result.risk_score = scored.risk_score
+    result.score_explanation = scored.explanation
 
     severe = [f.factor_name for f in result.findings if f.severity == Severity.severe]
     if severe:

@@ -23,7 +23,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from . import llm, memory
-from .guardrails import band_for_findings
+from .guardrails import band_for_findings, score_findings
 from .models import CaseRecord, ClientProfile, RiskFinding
 from .sections import COVER_SECTIONS
 
@@ -63,6 +63,8 @@ def ingest_file(path: Path) -> Optional[CaseRecord]:
         approved_findings=extracted.approved_findings,
         corrections=[],
         final_band=band_for_findings(extracted.approved_findings),
+        risk_score=score_findings(extracted.approved_findings).risk_score,
+        score_explanation=score_findings(extracted.approved_findings).explanation,
         provisional=True,
     )
     memory.store(case)

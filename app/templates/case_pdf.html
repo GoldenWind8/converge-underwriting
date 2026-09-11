@@ -73,7 +73,7 @@
 <h2>Overview</h2>
 <table class="overview">
   <tr>
-    <td class="band band-{{ case.final_band }}"><span class="band-name">{{ case.final_band }} risk</span><br /><span class="label">Overall risk band</span></td>
+    <td class="band band-{{ case.final_band }}"><span class="band-name">{{ case.final_band }} risk</span><br /><span class="label">Score {{ "%.2f"|format(case.risk_score) }} / 100</span></td>
     <td><span class="big">{{ sections_assessed }}</span><br /><span class="label">Cover sections assessed</span></td>
     <td><span class="big">{{ case.approved_findings|length }}</span><br /><span class="label">Risk factors identified</span></td>
   </tr>

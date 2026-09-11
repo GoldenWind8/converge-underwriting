@@ -1,8 +1,9 @@
 """Guardrails are the auditable core — these tests prove an underwriter can
 trust the deterministic layer regardless of what the LLM proposes."""
 
-from app.guardrails import (apply, band_for_findings, evidence_is_present,
-                            quote_is_substantial)
+from app.guardrails import (apply, band_for_findings, band_for_score,
+                            evidence_is_present, quote_is_substantial,
+                            score_findings)
 from app.models import (ClientProfile, RiskAssessmentDraft, RiskFinding,
                         Severity)
 from app.sections import SectionId
@@ -63,23 +64,46 @@ def test_quote_substance_rules():
     assert evidence_is_present("Fire extinguishers: No", DOC)
 
 
-def test_band_is_derived_from_the_severity_profile():
+def test_band_is_equal_weight_mean_of_severity_points():
     low = _finding(severity=Severity.low)
     medium = _finding(severity=Severity.medium)
     high = _finding(severity=Severity.high)
     severe = _finding(severity=Severity.severe)
     assert band_for_findings([]) == "Low"
+    assert score_findings([]).risk_score == 0.0
     assert band_for_findings([low, low]) == "Low"
+    assert score_findings([low, low]).risk_score == 12.5
     assert band_for_findings([medium]) == "Moderate"
+    assert score_findings([medium]).risk_score == 37.5
     assert band_for_findings([high]) == "Elevated"
-    assert band_for_findings([medium, medium, medium]) == "Elevated"
+    assert score_findings([high]).risk_score == 62.5
+    # Three medium findings average to 37.5 → Moderate (not the old count rule).
+    assert band_for_findings([medium, medium, medium]) == "Moderate"
     assert band_for_findings([severe]) == "High"
-    assert band_for_findings([high, high, high]) == "High"
+    assert score_findings([severe]).risk_score == 87.5
+    # Three high findings average to 62.5 → Elevated.
+    assert band_for_findings([high, high, high]) == "Elevated"
+    mixed = score_findings([low, severe])
+    assert mixed.risk_score == 50.0  # (12.5 + 87.5) / 2
+    assert mixed.band == "Elevated"
+    assert "12.5" in mixed.explanation and "87.5" in mixed.explanation
+
+
+def test_score_threshold_boundaries():
+    assert band_for_score(0.0) == "Low"
+    assert band_for_score(24.99) == "Low"
+    assert band_for_score(25.0) == "Moderate"
+    assert band_for_score(49.99) == "Moderate"
+    assert band_for_score(50.0) == "Elevated"
+    assert band_for_score(74.99) == "Elevated"
+    assert band_for_score(75.0) == "High"
+    assert band_for_score(100.0) == "High"
 
 
 def test_severe_finding_triggers_referral():
     result = apply(_draft(_finding(severity=Severity.severe)), DOC)
     assert result.band == "High"
+    assert result.risk_score == 87.5
     assert any("Severe finding" in r for r in result.referrals)
 
 

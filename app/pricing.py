@@ -25,7 +25,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from .guardrails import band_for_section
+from .guardrails import score_findings
 from .models import (CasePricing, PricedSection, Requirement, RiskFinding,
                      SectionNeed, SumInsured)
 from .sections import SectionId, section
@@ -136,7 +136,8 @@ def price_case(
         key=lambda n: section(n.section).number,
     )
     for need in required:
-        band = band_for_section(by_section.get(need.section, []))
+        scored = score_findings(by_section.get(need.section, []))
+        band = scored.band
         rate = float(rates[need.section.value]["rate"])
         table_loading = float(loadings[band])
         applied_loading = float(overrides.get(need.section, table_loading))
@@ -144,6 +145,8 @@ def price_case(
         line = PricedSection(
             section=need.section,
             band=band,
+            risk_score=scored.risk_score,
+            score_explanation=scored.explanation,
             rate=rate,
             table_loading=table_loading,
             applied_loading=applied_loading,

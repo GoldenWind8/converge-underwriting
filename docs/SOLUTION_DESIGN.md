@@ -155,16 +155,18 @@ The old rules-engine philosophy survives here, re-scoped to verification:
   too short or made of stopwords ("Yes") to evidence anything;
 - strip precedent / rule citations the model was not actually given, and note
   that it happened;
-- derive the referral band from the severity profile: High for any severe or
-  3+ high, Elevated for any high or 3+ medium, Moderate for any medium, Low
-  otherwise;
+- derive the referral band from an equal-weight mean of severity→points
+  (config/severity_points.json): low=12.5, medium=37.5, high=62.5,
+  severe=87.5; empty bucket scores 0; band thresholds are Low [0,25),
+  Moderate [25,50), Elevated [50,75), High [75,100];
 - refer to a human when a finding is severe, cites nothing (novel), or has
   confidence below 0.6, and whenever citations were stripped or findings
   dropped.
 
-An underwriter can reproduce the band by hand; what changed from the legacy
-design is that the findings list comes from precedent + playbook rather than
-fixed rules, and there is no arithmetic at all.
+An underwriter can reproduce the score and band by hand; what changed from
+the legacy design is that the findings list comes from precedent + playbook
+rather than fixed rules, and the arithmetic is a transparent mean rather
+than a count of severities.
 
 ### 4.4 `ingest_chats.py` — bootstrapping from historical chats
 
@@ -320,18 +322,17 @@ numpy matrix is sub-millisecond. A vector DB (Pinecone, Qdrant, pgvector)
 buys nothing yet and adds ops surface to a demo. pgvector on Postgres is the
 natural production step if this graduates.
 
-### 6.3 ⚖️ Who scores — nobody; LLM proposes, guardrails band, human approves
+### 6.3 ✅ Who scores — deterministic equal-weight mean; LLM proposes, human approves
+
 Options were (a) keep deterministic scoring and only let the LLM *find*
 factors, (b) let the LLM score freely, (c) a hybrid where the LLM suggested
-points and guardrails capped them. The client went further than (c): **no
-numeric score at all** (2026-08-26), because anything numeric reads as a
-price or a rating. Severity is a standardised categorical scale used
-identically across sections and cases, the referral band is a deterministic
-lookup over the severity profile (§4.3), and every prompt carries an explicit
-no-pricing boundary. Named per-field rules are gone. The 2026-08-31 pricing
-engine does not weaken this: premiums are computed *after* approval by plain
-Python (§4.6) from broker-confirmed inputs — the LLM still never emits a
-number.
+points and guardrails capped them. An earlier POC chose **no numeric score
+at all** (2026-08-26) so nothing looked like a price. On 2026-09-11 the
+product reintroduced a **deterministic** 0–100 risk score: each finding maps
+to severity midpoints (low 12.5 / medium 37.5 / high 62.5 / severe 87.5), the
+bucket score is the equal-weight mean, and the band is a threshold lookup.
+The LLM still never emits a number or a premium — money stays in `pricing.py`
+from broker-confirmed inputs. Named per-field rules remain gone.
 
 ### 6.4 ⚖️ Reflection cadence — synchronous per sign-off vs batched
 Per sign-off is what is built: it makes the demo interactive — correct one

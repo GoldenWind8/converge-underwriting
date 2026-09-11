@@ -231,6 +231,8 @@ async def approve(request: Request) -> HTMLResponse:
         approved_findings=approved,
         corrections=corrections,
         final_band=guardrails.band_for_findings(approved),
+        risk_score=guardrails.score_for_findings(approved),
+        score_explanation=guardrails.score_findings(approved).explanation,
     )
     # Deterministic pricing draft from the approved findings and the sums the
     # broker confirmed at gate 1. Loadings come from the band table; the Price

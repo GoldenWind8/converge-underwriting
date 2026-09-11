@@ -43,14 +43,18 @@ raw input ─▶ PROFILE ─▶ NEEDS DETERMINATION ─▶ GATE 1: confirm secti
   risk factors, informed by the section-tagged playbook rules and the comparable
   approved cases for that section. Every finding must quote verbatim evidence.
 - **Guardrails** — deterministic: hallucinated or insubstantial evidence is dropped,
-  unverifiable citations are removed, bands (per case and per section) are derived
-  from the severity profile, and severe / novel / low-confidence findings are
-  referred to a human. The LLM deliberately emits **no numeric score and no price**
-  — severity is a standardised categorical scale (low / medium / high / severe).
-  The exact rules are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#what-guards-what).
+  unverifiable citations are removed, and each finding's severity maps to points
+  (low 12.5 / medium 37.5 / high 62.5 / severe 87.5). The risk score for a cover
+  section (and for the case) is the **equal-weight mean** of those points; the
+  band is Low / Moderate / Elevated / High from thresholds on that mean. Severe /
+  novel / low-confidence findings are referred to a human. The LLM emits
+  **severity only — never a free-form score or a price**. Config lives in
+  `config/severity_points.json`. Exact rules:
+  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#what-guards-what).
 - **Human review** — a split-screen decision workspace (gate 2) links each finding to
-  its source evidence, recomputes the band live, and captures the reviewer's own
-  "why" note verbatim on every edit. Only approved cases ever enter memory.
+  its source evidence, recomputes the live score and band, and captures the
+  reviewer's own "why" note verbatim on every edit. Only approved cases ever enter
+  memory.
 - **Price** — a deterministic engine, no LLM (gate 3): per required section,
   `sum insured × base rate × (1 + band loading)`, quoting both the base and the
   adjusted premium with the findings that set the band as justification. Base rates
