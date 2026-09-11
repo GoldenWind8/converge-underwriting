@@ -125,7 +125,7 @@ class PricedSection(BaseModel):
     """One row of the deterministic pricing table (pricing.py — no LLM)."""
 
     section: SectionId
-    band: str  # per-section band from guardrails.band_for_section
+    band: str  # per-section band from guardrails.score_section
     risk_score: float = 0.0  # equal-weight mean of severity points (0–100)
     score_explanation: str = ""  # hand-reproducible working for the score
     rate: float  # annual % of sum insured, from the rates config

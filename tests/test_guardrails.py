@@ -1,9 +1,13 @@
 """Guardrails are the auditable core — these tests prove an underwriter can
 trust the deterministic layer regardless of what the LLM proposes."""
 
+import json
+
+import pytest
+
 from app.guardrails import (apply, band_for_findings, band_for_score,
-                            evidence_is_present, quote_is_substantial,
-                            score_findings)
+                            config_dir, evidence_is_present, load_thresholds,
+                            quote_is_substantial, score_findings)
 from app.models import (ClientProfile, RiskAssessmentDraft, RiskFinding,
                         Severity)
 from app.sections import SectionId
@@ -142,3 +146,56 @@ def test_unverified_audit_citations_are_removed_and_referred():
     assert len(result.invalid_citations) == 2
     assert any("Unverified audit" in referral for referral in result.referrals)
     assert any("NOVEL" in referral for referral in result.referrals)
+
+
+def _write_thresholds(rows: dict) -> None:
+    config_dir().mkdir(parents=True, exist_ok=True)
+    (config_dir() / "severity_points.json").write_text(
+        json.dumps({"thresholds": rows}), encoding="utf-8")
+
+
+def test_a_threshold_gap_is_rejected_instead_of_silently_banding_high():
+    """A score in an uncovered range matched no row and fell through onto High —
+    the most expensive loading — with nothing on screen to show the config was
+    wrong. A tuning typo must fail loudly instead."""
+    _write_thresholds({"Low": [0, 20], "Moderate": [25, 50],
+                       "Elevated": [50, 75], "High": [75, 100]})
+    # low + low + medium averages 20.83, which lands in the uncovered 20–25 gap.
+    bucket = [_finding(severity=Severity.low), _finding(severity=Severity.low),
+              _finding(severity=Severity.medium)]
+
+    with pytest.raises(ValueError) as raised:
+        score_findings(bucket)
+
+    assert "gap" in str(raised.value)
+
+
+def test_overlapping_or_short_threshold_rows_are_rejected():
+    _write_thresholds({"Low": [0, 30], "Moderate": [25, 50],
+                       "Elevated": [50, 75], "High": [75, 100]})
+    with pytest.raises(ValueError) as overlapping:
+        load_thresholds()
+    assert "overlap" in str(overlapping.value)
+
+    _write_thresholds({"Low": [0, 25], "Moderate": [25, 50],
+                       "Elevated": [50, 75], "High": [75, 90]})
+    with pytest.raises(ValueError) as short:
+        load_thresholds()
+    assert "0–100" in str(short.value)
+
+    _write_thresholds({"Low": [0, 25], "Moderate": [25, 25],
+                       "Elevated": [25, 75], "High": [75, 100]})
+    with pytest.raises(ValueError) as empty:
+        load_thresholds()
+    assert "lo < hi" in str(empty.value)
+
+
+def test_a_retuned_tiling_config_bands_by_its_own_cutoffs():
+    _write_thresholds({"Low": [0, 20], "Moderate": [20, 45],
+                       "Elevated": [45, 70], "High": [70, 100]})
+
+    assert band_for_score(19.99) == "Low"
+    assert band_for_score(22.5) == "Moderate"
+    assert band_for_score(69.99) == "Elevated"
+    assert band_for_score(70.0) == "High"
+    assert band_for_findings([_finding(severity=Severity.high)]) == "Elevated"

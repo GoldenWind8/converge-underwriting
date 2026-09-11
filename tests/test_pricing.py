@@ -6,7 +6,8 @@ import os
 from pathlib import Path
 
 from app import pricing
-from app.guardrails import band_for_findings, band_for_section
+from app.guardrails import (ScoreBreakdown, band_for_findings,
+                            band_for_section, score_for_section, score_section)
 from app.models import Requirement, RiskFinding, SectionNeed, Severity, SumInsured
 from app.sections import SectionId
 
@@ -22,11 +23,55 @@ def _need(section):
     return SectionNeed(section=section, requirement=Requirement.required, reason="test")
 
 
-def test_band_for_section_is_the_case_rule_scoped_to_one_section():
+def test_score_section_is_the_case_rule_scoped_to_one_section():
     findings = [_finding(SectionId.fire, Severity.severe)]
-    assert band_for_section(findings) == band_for_findings(findings) == "High"
-    assert band_for_section([]) == "Low"
-    assert band_for_section([_finding(SectionId.fire, Severity.medium)]) == "Moderate"
+    scored = score_section(findings)
+    assert (scored.band, scored.risk_score) == ("High", 87.5)
+    assert scored.band == band_for_findings(findings)
+    assert score_section([]).band == "Low"
+    assert score_section([_finding(SectionId.fire, Severity.medium)]).risk_score == 37.5
+    # The band/score helpers are views on the seam, never a second rule.
+    assert band_for_section(findings) == scored.band
+    assert score_for_section(findings) == scored.risk_score
+
+
+def test_price_case_rates_every_section_through_the_section_seam(monkeypatch):
+    """The loading has to follow whatever the seam decides, so a later
+    refinement inside it — mitigation credit, say — reprices the case without
+    pricing.py knowing anything about it."""
+    pricing.save_loadings({"Low": -10, "Moderate": 0, "Elevated": 10, "High": 25})
+    monkeypatch.setattr(pricing, "score_section", lambda findings, config=None: ScoreBreakdown(
+        risk_score=3.0, band="Low", explanation="severe finding fully mitigated",
+    ))
+
+    result = pricing.price_case(
+        needs=[_need(SectionId.fire)],
+        findings=[_finding(SectionId.fire, Severity.severe)],
+        sums=[SumInsured(section=SectionId.fire, amount=1_000_000)],
+    )
+
+    line = result.lines[0]
+    assert (line.band, line.risk_score) == ("Low", 3.0)
+    assert line.table_loading == line.applied_loading == -10
+    assert line.score_explanation == "severe finding fully mitigated"
+
+
+def test_price_case_parses_the_scoring_config_once_per_case(monkeypatch):
+    """Every required section is scored against one parse, not one each."""
+    from app import guardrails
+
+    parses = []
+    real = guardrails._read_scoring_config
+    monkeypatch.setattr(guardrails, "_read_scoring_config",
+                        lambda: (parses.append(1), real())[1])
+
+    pricing.price_case(
+        needs=[_need(SectionId.fire), _need(SectionId.glass), _need(SectionId.money)],
+        findings=[_finding(SectionId.fire, Severity.high)],
+        sums=[],
+    )
+
+    assert len(parses) == 1
 
 
 def test_price_case_carries_section_risk_score():

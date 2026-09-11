@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 from typing import Dict, List, Optional
 
-from .guardrails import config_dir, score_findings
+from .guardrails import config_dir, load_scoring_config, score_section
 from .models import (CasePricing, PricedSection, Requirement, RiskFinding,
                      SectionNeed, SumInsured)
 from .sections import SectionId, section
@@ -118,6 +118,7 @@ def price_case(
     overrides = overrides or {}
     rates = load_rates()
     loadings = load_loadings()
+    scoring = load_scoring_config()
 
     by_section: Dict[SectionId, List[RiskFinding]] = {}
     for f in findings:
@@ -130,7 +131,7 @@ def price_case(
         key=lambda n: section(n.section).number,
     )
     for need in required:
-        scored = score_findings(by_section.get(need.section, []))
+        scored = score_section(by_section.get(need.section, []), scoring)
         band = scored.band
         rate = float(rates[need.section.value]["rate"])
         table_loading = float(loadings[band])

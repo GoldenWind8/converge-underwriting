@@ -51,7 +51,7 @@ flowchart TD
     G -- yes --> S{quote substantial?<br/>≥ 12 chars, not just<br/>'Yes' / stopwords}
     S -- no --> X
     S -- yes --> Ci[precedent / rule citations<br/>not in the supplied context<br/>are stripped + noted]
-    Ci --> Bd[equal-weight mean of severity points<br/>low 12.5 · medium 37.5 · high 62.5 · severe 87.5<br/>Low [0,25) · Moderate [25,50)<br/>Elevated [50,75) · High [75,100]]
+    Ci --> Bd["equal-weight mean of severity points<br/>low 12.5 · medium 37.5 · high 62.5 · severe 87.5<br/>Low [0,25) · Moderate [25,50)<br/>Elevated [50,75) · High [75,100]"]
     Bd --> I{severe? novel? confidence < 0.6?<br/>citations stripped? findings dropped?}
     I -- yes --> J[referral to human]
     I -- no --> K[draft ready for review]
@@ -63,11 +63,11 @@ points, average them with equal weights, and look up the band — arithmetic an
 underwriter can reproduce by hand. The same evidence check applies to findings
 a reviewer adds on the review page.
 
-`band_for_section()` / `score_findings()` apply the same mean rule to one
-section's findings — deliberately the **single seam** for section rating. The
-pricing engine reads the band from it and picks the loading from
-`config/loadings.json`; change how sections are scored by changing that one
-path (and `config/severity_points.json`).
+`score_section()` applies the same mean rule to one section's findings and
+returns the whole breakdown — deliberately the **single seam** for section
+rating. The pricing engine reads the band and score from it and picks the
+loading from `config/loadings.json`; change how sections are scored by changing
+that one path (and `config/severity_points.json`).
 
 ## Which file does what
 

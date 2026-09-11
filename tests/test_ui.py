@@ -6,9 +6,9 @@ from pathlib import Path
 from app.guardrails import (GuardrailResult, band_rule_text,
                             load_scoring_config, score_findings)
 from app.memory import LearningProposal
-from app.models import (CaseRecord, ClientProfile, Correction,
-                        NeedsDetermination, Requirement, RiskAssessmentDraft,
-                        RiskFinding, SectionNeed, Severity)
+from app.models import (CasePricing, CaseRecord, ClientProfile, Correction,
+                        NeedsDetermination, PricedSection, Requirement,
+                        RiskAssessmentDraft, RiskFinding, SectionNeed, Severity)
 from app.needs import _repair
 from app.report import (render_index, render_needs, render_playbook,
                         render_report, render_review)
@@ -148,3 +148,25 @@ def test_review_recalc_is_handed_the_config_the_server_bands_with():
     assert 'id="live-score">80.00</span>' in html
     assert band_rule_text() in html
     assert "62.5" not in html, "no default point value may survive a tuned config"
+
+
+def test_report_shows_the_section_score_behind_each_loading():
+    """The header states a case score; each priced section states the score that
+    picked its own loading, so the report explains every number it shows."""
+    case = CaseRecord(
+        case_id="C-0003", created_at="2026-08-07T10:00:00", source="assessment",
+        client_profile=PROFILE, summary=PROFILE.summary, needs=NEEDS,
+        draft_findings=[FINDING], approved_findings=[FINDING],
+        final_band="Elevated", risk_score=62.5,
+        pricing=CasePricing(
+            lines=[PricedSection(section=SectionId.fire, band="Elevated", risk_score=62.5,
+                                 rate=0.20, table_loading=10, applied_loading=10,
+                                 sum_insured=1_000_000, base_premium=2_000,
+                                 adjusted_premium=2_200)],
+            base_total=2_000, adjusted_total=2_200,
+        ),
+    )
+
+    html = render_report(case, "fake", "2026-08-07 10:00")
+
+    assert "62.50 pts" in html

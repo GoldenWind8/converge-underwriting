@@ -193,7 +193,7 @@ FastAPI + Jinja, single implicit reviewer, no auth:
    and say why on each edit. Approve stores the case and triggers reflection.
 3. **Price** — the deterministic premium table (`pricing.py`): per required
    section, sum insured x base rate gives the base premium, and the section's
-   band (guardrails.band_for_section over that section's approved findings)
+   band (guardrails.score_section over that section's approved findings)
    picks the loading from the band table. The underwriter can override a
    loading; the override is disclosed against the table value, on screen and
    on the PDF. Sections without a confirmed sum insured show "not priced" —
@@ -214,7 +214,7 @@ Base rates (annual % of sum insured, flat per section) live in
 values discount) in `config/loadings.json`. Both are git-tracked, created
 with placeholder values on first use (placeholders stand in until the
 broker's rate sheet arrives), and editable on the `/rates` page.
-`band_for_section()` in guardrails.py is deliberately the *single* seam for
+`score_section()` in guardrails.py is deliberately the *single* seam for
 section rating: crediting mitigation factors later changes that one function
 and nothing downstream.
 

@@ -56,6 +56,9 @@ DEFAULT_THRESHOLDS: List[Tuple[str, float, float]] = [
     ("High", 75.0, 100.0),
 ]
 
+# The severity → points map and the ordered band rows, always parsed together.
+ScoringConfig = Tuple[Dict[str, float], List[Tuple[str, float, float]]]
+
 
 @dataclass
 class ScoreBreakdown:
@@ -98,6 +101,32 @@ def _points_from(raw: dict) -> Dict[str, float]:
     return points
 
 
+def _validate_threshold_rows(rows: List[Tuple[str, float, float]]) -> None:
+    """The bands must tile [0, 100] with no gap and no overlap.
+
+    An uncovered score matches no row, and band_for_score falls through onto
+    High — the most expensive loading in config/loadings.json. A tuning typo
+    must fail loudly here rather than silently reprice a section.
+    """
+    for band, lo, hi in rows:
+        if not lo < hi:
+            raise ValueError(
+                f"severity_points.json thresholds.{band} must have lo < hi, got [{lo:g}, {hi:g}]"
+            )
+    if rows[0][1] != 0.0 or rows[-1][2] != 100.0:
+        raise ValueError(
+            "severity_points.json thresholds must span the whole 0–100 score range, got "
+            f"[{rows[0][1]:g}, {rows[-1][2]:g}]"
+        )
+    for (lower, _, lower_hi), (upper, upper_lo, _) in zip(rows, rows[1:]):
+        if lower_hi != upper_lo:
+            gap = "gap" if lower_hi < upper_lo else "overlap"
+            raise ValueError(
+                f"severity_points.json thresholds leave a {gap} between {lower} "
+                f"(ends {lower_hi:g}) and {upper} (starts {upper_lo:g})"
+            )
+
+
 def _thresholds_from(raw: dict) -> List[Tuple[str, float, float]]:
     thresholds = raw.get("thresholds") or {}
     if not thresholds:
@@ -108,10 +137,11 @@ def _thresholds_from(raw: dict) -> List[Tuple[str, float, float]]:
         if pair is None or len(pair) != 2:
             raise ValueError(f"severity_points.json thresholds.{band} must be [lo, hi]")
         rows.append((band, float(pair[0]), float(pair[1])))
+    _validate_threshold_rows(rows)
     return rows
 
 
-def load_scoring_config() -> Tuple[Dict[str, float], List[Tuple[str, float, float]]]:
+def load_scoring_config() -> ScoringConfig:
     """Points map + ordered (band, lo, hi) rows from ONE parse of the config.
 
     Scoring always needs both halves together, so every caller that bands a
@@ -172,9 +202,13 @@ def band_for_score(score: float, thresholds: List[Tuple[str, float, float]] | No
     return "High"
 
 
-def score_findings(findings: List[RiskFinding]) -> ScoreBreakdown:
-    """Equal-weight mean of severity points → band. Empty bucket scores 0 (Low)."""
-    points_table, thresholds = load_scoring_config()
+def score_findings(findings: List[RiskFinding], config: ScoringConfig | None = None) -> ScoreBreakdown:
+    """Equal-weight mean of severity points → band. Empty bucket scores 0 (Low).
+
+    Pass `config` to score many buckets against a single parse of the config
+    file, as the pricing engine does across a case's cover sections.
+    """
+    points_table, thresholds = config if config is not None else load_scoring_config()
     finding_points: List[Tuple[str, str, float]] = []
     for f in findings:
         pts = points_for_severity(f.severity, points_table)
@@ -214,19 +248,23 @@ def score_for_findings(findings: List[RiskFinding]) -> float:
     return score_findings(findings).risk_score
 
 
-def band_for_section(findings: List[RiskFinding]) -> str:
-    """Band for ONE cover section, from that section's findings only.
+def score_section(findings: List[RiskFinding], config: ScoringConfig | None = None) -> ScoreBreakdown:
+    """Score ONE cover section, from that section's findings only.
 
     This is the single seam for section rating: the pricing engine and every
-    surface that shows a per-section band call this and nothing else, so a
-    future refinement — e.g. crediting mitigation factors to offset a single
-    worst finding — changes this function and nothing downstream of it.
+    surface that shows a per-section band or score call this and nothing else,
+    so a future refinement — e.g. crediting mitigation factors to offset a
+    single worst finding — changes this function and nothing downstream of it.
     """
-    return score_findings(findings).band
+    return score_findings(findings, config)
+
+
+def band_for_section(findings: List[RiskFinding]) -> str:
+    return score_section(findings).band
 
 
 def score_for_section(findings: List[RiskFinding]) -> float:
-    return score_findings(findings).risk_score
+    return score_section(findings).risk_score
 
 
 def _normalise(text: str) -> str:
