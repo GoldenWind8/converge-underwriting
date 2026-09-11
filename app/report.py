@@ -17,7 +17,7 @@ from typing import List, Optional
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from .guardrails import GuardrailResult
+from .guardrails import GuardrailResult, band_rule_text, load_scoring_config
 from .memory import LearningProposal
 from .models import (CaseRecord, NeedsDetermination, RiskAssessmentDraft,
                      RiskFinding, SectionNeed)
@@ -82,10 +82,17 @@ def render_review(draft_id: str, draft: RiskAssessmentDraft, result: GuardrailRe
                   needs: Optional[List[SectionNeed]] = None,
                   usage: Optional[dict] = None) -> str:
     needs = needs or []
+    # The live recalc in the page scores exactly as guardrails.score_findings
+    # does, so it is handed the same config the server bands with rather than
+    # a copy of the numbers that could drift from it.
+    points, thresholds = load_scoring_config()
     return _env.get_template("review.html").render(
         draft_id=draft_id, draft=draft, result=result, engine=engine,
         generated_at=generated_at, raw_text=raw_text, needs=needs,
         groups=_section_groups(result.findings, needs), usage=usage,
+        severity_points=points,
+        band_thresholds=[{"band": b, "lo": lo, "hi": hi} for b, lo, hi in thresholds],
+        band_rule=band_rule_text(points, thresholds),
     )
 
 

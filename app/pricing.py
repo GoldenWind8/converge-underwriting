@@ -21,11 +21,9 @@ stand-ins until the broker's rate sheet arrives.
 from __future__ import annotations
 
 import json
-import os
-from pathlib import Path
 from typing import Dict, List, Optional
 
-from .guardrails import score_findings
+from .guardrails import config_dir, score_findings
 from .models import (CasePricing, PricedSection, Requirement, RiskFinding,
                      SectionNeed, SumInsured)
 from .sections import SectionId, section
@@ -67,13 +65,9 @@ DEFAULT_LOADINGS: Dict[str, float] = {
 }
 
 
-def _config_dir() -> Path:
-    return Path(os.environ.get("UW_CONFIG_DIR", Path(__file__).resolve().parent.parent / "config"))
-
-
 def _load(filename: str, defaults: dict) -> dict:
     """Read a config file, creating it with the defaults on first use."""
-    path = _config_dir() / filename
+    path = config_dir() / filename
     if not path.exists():
         _save(filename, defaults)
         return json.loads(json.dumps(defaults))
@@ -81,7 +75,7 @@ def _load(filename: str, defaults: dict) -> dict:
 
 
 def _save(filename: str, payload: dict) -> None:
-    path = _config_dir() / filename
+    path = config_dir() / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

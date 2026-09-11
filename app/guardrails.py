@@ -56,11 +56,6 @@ DEFAULT_THRESHOLDS: List[Tuple[str, float, float]] = [
     ("High", 75.0, 100.0),
 ]
 
-BAND_RULE_TEXT = (
-    "Equal-weight mean of severity points (low=12.5, medium=37.5, high=62.5, "
-    "severe=87.5); Low [0,25), Moderate [25,50), Elevated [50,75), High [75,100]."
-)
-
 
 @dataclass
 class ScoreBreakdown:
@@ -83,38 +78,78 @@ class GuardrailResult:
     invalid_citations: List[str] = field(default_factory=list)
 
 
-def _config_dir() -> Path:
+def config_dir() -> Path:
+    """The one definition of where the git-tracked, human-editable config files
+    live. pricing.py reads its rate and loading tables from the same directory."""
     return Path(os.environ.get("UW_CONFIG_DIR", Path(__file__).resolve().parent.parent / "config"))
 
 
-def load_severity_points() -> Dict[str, float]:
-    """Severity → points map. Missing keys fall back to the documented defaults."""
-    path = _config_dir() / "severity_points.json"
+def _read_scoring_config() -> dict:
+    path = config_dir() / "severity_points.json"
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _points_from(raw: dict) -> Dict[str, float]:
     points = dict(DEFAULT_SEVERITY_POINTS)
-    if path.exists():
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        for key, value in (raw.get("points") or {}).items():
-            points[str(key)] = float(value)
+    for key, value in (raw.get("points") or {}).items():
+        points[str(key)] = float(value)
     return points
 
 
-def load_thresholds() -> List[Tuple[str, float, float]]:
-    """Ordered (band, lo, hi) rows. High is inclusive of 100."""
-    path = _config_dir() / "severity_points.json"
-    if not path.exists():
-        return list(DEFAULT_THRESHOLDS)
-    raw = json.loads(path.read_text(encoding="utf-8"))
+def _thresholds_from(raw: dict) -> List[Tuple[str, float, float]]:
     thresholds = raw.get("thresholds") or {}
     if not thresholds:
         return list(DEFAULT_THRESHOLDS)
-    order = ["Low", "Moderate", "Elevated", "High"]
     rows: List[Tuple[str, float, float]] = []
-    for band in order:
+    for band, _, _ in DEFAULT_THRESHOLDS:
         pair = thresholds.get(band)
         if pair is None or len(pair) != 2:
             raise ValueError(f"severity_points.json thresholds.{band} must be [lo, hi]")
         rows.append((band, float(pair[0]), float(pair[1])))
     return rows
+
+
+def load_scoring_config() -> Tuple[Dict[str, float], List[Tuple[str, float, float]]]:
+    """Points map + ordered (band, lo, hi) rows from ONE parse of the config.
+
+    Scoring always needs both halves together, so every caller that bands a
+    score should take them from here rather than re-reading the file twice.
+    """
+    raw = _read_scoring_config()
+    return _points_from(raw), _thresholds_from(raw)
+
+
+def load_severity_points() -> Dict[str, float]:
+    """Severity → points map. Missing keys fall back to the documented defaults."""
+    return _points_from(_read_scoring_config())
+
+
+def load_thresholds() -> List[Tuple[str, float, float]]:
+    """Ordered (band, lo, hi) rows. High is inclusive of 100."""
+    return _thresholds_from(_read_scoring_config())
+
+
+def band_rule_text(
+    points: Dict[str, float] | None = None,
+    thresholds: List[Tuple[str, float, float]] | None = None,
+) -> str:
+    """The banding rule in one sentence, built from the live config so it can
+    never state numbers other than the ones actually scored with."""
+    if points is None or thresholds is None:
+        loaded_points, loaded_thresholds = load_scoring_config()
+        points = points if points is not None else loaded_points
+        thresholds = thresholds if thresholds is not None else loaded_thresholds
+    pairs = ", ".join(
+        f"{s.value}={points[s.value]:g}"
+        for s in sorted(SEVERITY_ORDER, key=SEVERITY_ORDER.__getitem__)
+    )
+    bands = ", ".join(
+        f"{band} [{lo:g},{hi:g}]" if band == "High" else f"{band} [{lo:g},{hi:g})"
+        for band, lo, hi in thresholds
+    )
+    return f"Equal-weight mean of severity points ({pairs}); {bands}."
 
 
 def points_for_severity(severity: Severity, points: Dict[str, float] | None = None) -> float:
@@ -139,8 +174,7 @@ def band_for_score(score: float, thresholds: List[Tuple[str, float, float]] | No
 
 def score_findings(findings: List[RiskFinding]) -> ScoreBreakdown:
     """Equal-weight mean of severity points → band. Empty bucket scores 0 (Low)."""
-    points_table = load_severity_points()
-    thresholds = load_thresholds()
+    points_table, thresholds = load_scoring_config()
     finding_points: List[Tuple[str, str, float]] = []
     for f in findings:
         pts = points_for_severity(f.severity, points_table)
