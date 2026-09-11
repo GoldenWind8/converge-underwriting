@@ -51,21 +51,23 @@ flowchart TD
     G -- yes --> S{quote substantial?<br/>≥ 12 chars, not just<br/>'Yes' / stopwords}
     S -- no --> X
     S -- yes --> Ci[precedent / rule citations<br/>not in the supplied context<br/>are stripped + noted]
-    Ci --> Bd[band from severity profile<br/>High: any severe or 3+ high<br/>Elevated: any high or 3+ medium<br/>Moderate: any medium · Low: else]
+    Ci --> Bd["equal-weight mean of severity points<br/>low 12.5 · medium 37.5 · high 62.5 · severe 87.5<br/>Low [0,25) · Moderate [25,50)<br/>Elevated [50,75) · High [75,100]"]
     Bd --> I{severe? novel? confidence < 0.6?<br/>citations stripped? findings dropped?}
     I -- yes --> J[referral to human]
     I -- no --> K[draft ready for review]
 ```
 
-Everything in this diagram is plain Python in `guardrails.py` — no LLM. The LLM emits
-no numeric score: severity is a categorical scale (low / medium / high / severe) and
-the band is a lookup an underwriter can reproduce by hand. The same evidence check
-applies to findings a reviewer adds on the review page.
+Everything in this diagram is plain Python in `guardrails.py` — no LLM. The LLM
+emits severity only (low / medium / high / severe). Guardrails map severity to
+points, average them with equal weights, and look up the band — arithmetic an
+underwriter can reproduce by hand. The same evidence check applies to findings
+a reviewer adds on the review page.
 
-`band_for_section()` applies the same count rule to one section's findings — it is
-deliberately the **single seam** for section rating. The pricing engine reads the band
-from it and picks the loading from `config/loadings.json`; change how sections are
-rated (e.g. crediting mitigation factors) by changing that one function.
+`score_section()` applies the same mean rule to one section's findings and
+returns the whole breakdown — deliberately the **single seam** for section
+rating. The pricing engine reads the band and score from it and picks the
+loading from `config/loadings.json`; change how sections are scored by changing
+that one path (and `config/severity_points.json`).
 
 ## Which file does what
 
@@ -98,7 +100,9 @@ rated (e.g. crediting mitigation factors) by changing that one function.
 
 Delete the `data/` folder to factory-reset; `python -m app.ingest_chats` re-seeds it.
 
-Pricing configuration is *not* in `data/`: `config/rates.json` and
-`config/loadings.json` are git-tracked (the placeholder values stand in until the
-broker's rate sheet arrives) and editable on `/rates`. Stored cases keep the pricing
-they were approved with; a config change only affects what is priced next.
+Pricing and scoring configuration is *not* in `data/`: `config/rates.json`,
+`config/loadings.json`, and `config/severity_points.json` are git-tracked.
+Rates and loadings are editable on `/rates`; severity points and band thresholds
+are hand-edited and validated when loaded (a bad edit fails loudly rather than
+mis-banding). Stored cases keep the pricing they were approved with; a config
+change only affects what is scored and priced next.

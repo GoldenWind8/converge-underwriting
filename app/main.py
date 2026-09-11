@@ -220,6 +220,7 @@ async def approve(request: Request) -> HTMLResponse:
 
     approved.sort(key=lambda f: (section(f.section).number,
                                  -guardrails.SEVERITY_ORDER[f.severity]))
+    scored = guardrails.score_findings(approved)
     case = CaseRecord(
         case_id=memory.next_case_id(),
         created_at=_dt.datetime.now().isoformat(timespec="seconds"),
@@ -230,7 +231,9 @@ async def approve(request: Request) -> HTMLResponse:
         draft_findings=result.findings,
         approved_findings=approved,
         corrections=corrections,
-        final_band=guardrails.band_for_findings(approved),
+        final_band=scored.band,
+        risk_score=scored.risk_score,
+        score_explanation=scored.explanation,
     )
     # Deterministic pricing draft from the approved findings and the sums the
     # broker confirmed at gate 1. Loadings come from the band table; the Price

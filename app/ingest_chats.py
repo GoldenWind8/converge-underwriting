@@ -23,7 +23,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from . import llm, memory
-from .guardrails import band_for_findings
+from .guardrails import score_findings
 from .models import CaseRecord, ClientProfile, RiskFinding
 from .sections import COVER_SECTIONS
 
@@ -53,6 +53,7 @@ def ingest_file(path: Path) -> Optional[CaseRecord]:
     if not extracted.contains_risk_decision or not extracted.approved_findings:
         return None
 
+    scored = score_findings(extracted.approved_findings)
     case = CaseRecord(
         case_id=memory.next_case_id(),
         created_at=_dt.datetime.now().isoformat(timespec="seconds"),
@@ -62,7 +63,9 @@ def ingest_file(path: Path) -> Optional[CaseRecord]:
         draft_findings=extracted.approved_findings,
         approved_findings=extracted.approved_findings,
         corrections=[],
-        final_band=band_for_findings(extracted.approved_findings),
+        final_band=scored.band,
+        risk_score=scored.risk_score,
+        score_explanation=scored.explanation,
         provisional=True,
     )
     memory.store(case)
