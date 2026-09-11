@@ -144,8 +144,9 @@ app/
   main.py          FastAPI routes;  report.py + templates/  HTML rendering
   pdf.py           client-facing PDF of an approved case (templates/case_pdf.html + xhtml2pdf)
   ingest_chats.py  seed memory (provisional) from historical chats;  evaluate.py  eval harness
-config/            rates.json (base rate per section) + loadings.json (band → loading %) —
-                   git-tracked, editable on /rates, placeholders until the broker's rate sheet
+config/            rates.json (base rate per section) + loadings.json (band → loading %) +
+                   severity_points.json (severity→points and band thresholds) — git-tracked;
+                   rates/loadings editable on /rates; severity_points hand-edited (validated at load)
 data/              cases.db, playbook.md, playbook_history/  (git-ignored; safe to delete)
 sample_data/       example application, blank broker intake sheet (PDF + text), example
                    PDF output, synthetic historical chats

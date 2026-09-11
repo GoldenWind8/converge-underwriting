@@ -100,7 +100,9 @@ that one path (and `config/severity_points.json`).
 
 Delete the `data/` folder to factory-reset; `python -m app.ingest_chats` re-seeds it.
 
-Pricing configuration is *not* in `data/`: `config/rates.json` and
-`config/loadings.json` are git-tracked (the placeholder values stand in until the
-broker's rate sheet arrives) and editable on `/rates`. Stored cases keep the pricing
-they were approved with; a config change only affects what is priced next.
+Pricing and scoring configuration is *not* in `data/`: `config/rates.json`,
+`config/loadings.json`, and `config/severity_points.json` are git-tracked.
+Rates and loadings are editable on `/rates`; severity points and band thresholds
+are hand-edited and validated when loaded (a bad edit fails loudly rather than
+mis-banding). Stored cases keep the pricing they were approved with; a config
+change only affects what is scored and priced next.

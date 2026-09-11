@@ -2,11 +2,13 @@
 trust the deterministic layer regardless of what the LLM proposes."""
 
 import json
+from pathlib import Path
 
 import pytest
 
 from app.guardrails import (apply, band_for_findings, band_for_score,
-                            config_dir, evidence_is_present, load_thresholds,
+                            config_dir, evidence_is_present, load_scoring_config,
+                            load_severity_points, load_thresholds,
                             quote_is_substantial, score_findings)
 from app.models import (ClientProfile, RiskAssessmentDraft, RiskFinding,
                         Severity)
@@ -199,3 +201,29 @@ def test_a_retuned_tiling_config_bands_by_its_own_cutoffs():
     assert band_for_score(69.99) == "Elevated"
     assert band_for_score(70.0) == "High"
     assert band_for_findings([_finding(severity=Severity.high)]) == "Elevated"
+
+
+def test_out_of_range_severity_points_are_rejected(tmp_path, monkeypatch):
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "severity_points.json").write_text(
+        json.dumps({"points": {"low": 125}, "thresholds": {
+            "Low": [0, 25], "Moderate": [25, 50], "Elevated": [50, 75], "High": [75, 100],
+        }}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("UW_CONFIG_DIR", str(config))
+    with pytest.raises(ValueError) as raised:
+        load_severity_points()
+    assert "points.low" in str(raised.value)
+
+
+def test_shipped_severity_points_config_parses_cleanly(monkeypatch):
+    """The git-tracked config must load under the same validation production uses."""
+    shipped = Path(__file__).resolve().parents[1] / "config"
+    monkeypatch.setenv("UW_CONFIG_DIR", str(shipped))
+    points, thresholds = load_scoring_config()
+    assert points["low"] == 12.5
+    assert points["severe"] == 87.5
+    assert thresholds[0] == ("Low", 0.0, 25.0)
+    assert band_for_score(62.5, thresholds) == "Elevated"

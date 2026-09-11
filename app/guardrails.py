@@ -98,6 +98,11 @@ def _points_from(raw: dict) -> Dict[str, float]:
     points = dict(DEFAULT_SEVERITY_POINTS)
     for key, value in (raw.get("points") or {}).items():
         points[str(key)] = float(value)
+    for key, value in points.items():
+        if not 0.0 <= value <= 100.0:
+            raise ValueError(
+                f"severity_points.json points.{key} must be in [0, 100], got {value:g}"
+            )
     return points
 
 
@@ -191,15 +196,18 @@ def band_for_score(score: float, thresholds: List[Tuple[str, float, float]] | No
     """Map a 0–100 score onto Low / Moderate / Elevated / High."""
     rows = thresholds or load_thresholds()
     s = float(score)
+    if s < 0 or s > 100:
+        raise ValueError(f"risk score must be in [0, 100], got {s:g}")
     for band, lo, hi in rows:
         if band == "High":
             if lo <= s <= hi:
                 return band
         elif lo <= s < hi:
             return band
-    if s < 0:
-        return "Low"
-    return "High"
+    raise ValueError(
+        f"risk score {s:g} matches no band in the configured thresholds "
+        f"(expected a contiguous cover of [0, 100])"
+    )
 
 
 def score_findings(findings: List[RiskFinding], config: ScoringConfig | None = None) -> ScoreBreakdown:
