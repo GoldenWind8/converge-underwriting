@@ -4,7 +4,7 @@ converted with xhtml2pdf (pure Python — no browser or system libraries).
 
 The PDF is the client-facing view of a case: section names, plain-English
 factor titles, severities, reasoning and the quoted evidence. Internal codes
-(factor slugs, playbook rule ids, precedent case ids, confidence, reviewer
+(factor slugs, precedent case ids, confidence, reviewer
 edits) are deliberately left out.
 """
 

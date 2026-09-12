@@ -10,25 +10,25 @@ combining governed AI agents, workflow automation, and institutional knowledge.
 Takes a raw commercial-insurance application (form, email, broker notes), works out
 which of the 18 cover sections the business actually needs, drafts a per-section
 risk assessment, prices each required section deterministically from broker base
-rates, and **learns from every human review**: corrections update a plain markdown
-playbook and approved cases become retrievable precedents, so the very next
-assessment is better.
+rates, and **learns from every approved case**: the case — with the underwriter's
+corrections and why-notes — becomes a retrievable precedent for the next assessment
+of the same sections, so the very next assessment is better.
 
 ```
 raw input ─▶ PROFILE ─▶ NEEDS DETERMINATION ─▶ GATE 1: confirm sections
-             + SUMS INSURED   (18 sections)          + sums insured
+             + SUMS INSURED   (18 sections)          + a sum insured for each
              ┌───────────────────────────────────────┘
              ▼
-        ASSESS (one call per required section) ─▶ GUARDRAILS ─▶ GATE 2: human review
-             ▲  ▲                                 (deterministic)      │
-             │  └── playbook.md (section-tagged rules)                 ▼
-             │                        PRICING ENGINE ◀── approved case
-             │      (deterministic: sum insured × rate × loading)
-             │                           │
-             │                           ▼ GATE 3: confirm/override loadings
-             └── similar past cases ◀── case memory ── report / PDF
-                                             │
-                                             └─▶ REFLECT ─▶ GATE 4: accept/edit/skip ─▶ playbook.md
+        ASSESS (one call per required section) ─▶ GUARDRAILS ─▶ PRICING ENGINE
+             ▲                                   (deterministic)  (deterministic)
+             │                                                          │
+             │                          GATE 2: rate each finding, confirm loadings,
+             │                                  "checked by", approve
+             │                                     ▲ │           │
+             │               review drill-down ────┘ │           ▼
+             │            (evidence, add / remove)   │      report / PDF
+             └── similar approved cases ◀── case memory ◀── add to memory ✓
+                 (+ the reviewer's corrections)
 ```
 
 - **Needs determination** — every one of the 18 cover sections (transcribed from the
@@ -40,28 +40,32 @@ raw input ─▶ PROFILE ─▶ NEEDS DETERMINATION ─▶ GATE 1: confirm secti
   everything downstream.
 - **Assess** — one focused model call per confirmed section, run concurrently so a
   submission takes about as long as its slowest section. The LLM proposes its own
-  risk factors, informed by the section-tagged playbook rules and the comparable
-  approved cases for that section. Every finding must quote verbatim evidence.
+  risk factors, informed by the comparable approved cases for that section — each
+  carrying the reviewer's corrections and why-notes. Every finding must quote
+  verbatim evidence.
 - **Guardrails** — deterministic: hallucinated or insubstantial evidence is dropped,
   unverifiable citations are removed, bands (per case and per section) are derived
   from the severity profile, and severe / novel / low-confidence findings are
   referred to a human. The LLM deliberately emits **no numeric score and no price**
   — severity is a standardised categorical scale (low / medium / high / severe).
   The exact rules are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#what-guards-what).
-- **Human review** — a split-screen decision workspace (gate 2) links each finding to
-  its source evidence, recomputes the band live, and captures the reviewer's own
-  "why" note verbatim on every edit. Only approved cases ever enter memory.
-- **Price** — a deterministic engine, no LLM (gate 3): per required section,
-  `sum insured × base rate × (1 + band loading)`, quoting both the base and the
-  adjusted premium with the findings that set the band as justification. Base rates
-  (flat per section, placeholder values until the broker's rate sheet lands) and the
-  band→loading table are git-tracked JSON in `config/`, editable on the **Rates**
-  page. The underwriter can override a loading per section; overrides are disclosed
-  against the table value on screen and on the PDF. No confirmed sum insured means
-  "not priced" — never a guess.
-- **Reflect** — after sign-off, corrections (with their why-notes) become an editable,
-  section-tagged playbook proposal. The underwriter must accept it (gate 3) before it
-  becomes active; every previous version is retained in `data/playbook_history/`.
+- **Rate & price** — the approval gate (gate 2), one page. Per required section the
+  deterministic premium row — `sum insured × base rate × (1 + band loading)`, no LLM —
+  with the findings that set the band listed under it as identifier · rating ·
+  description. Change a rating and the section re-bands and re-prices instantly;
+  override a loading and it is disclosed against the table value on screen and on
+  the PDF. Base rates (flat per section, placeholder values until the broker's rate
+  sheet lands) and the band→loading table are git-tracked JSON in `config/`, editable
+  on the **Rates** page. **Checked by** is required; **Add to case memory** decides
+  whether the case becomes a precedent. Only approved cases ever enter memory.
+- **Review drill-down** — from the price page, a split-screen workspace links each
+  finding to its source evidence, lets the reviewer remove or add findings (evidence
+  required), and captures their own "why" note verbatim on every edit. Save & go back
+  returns to the price page; nothing is stored until approval.
+- **Case memory** — every approved case is listed with who checked it; a case can be
+  deleted with a name and a reason (it leaves retrieval, stays readable, and is logged
+  in a Deleted section). Cases are only retrieved for the sections they have findings
+  in, so a Fire lesson never reaches a Motor assessment.
 
 How the pieces link together (with diagrams): **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 Design rationale and the decisions behind it: **[docs/SOLUTION_DESIGN.md](docs/SOLUTION_DESIGN.md)**.
@@ -85,20 +89,20 @@ uvicorn app.main:app --reload     # open http://127.0.0.1:8000
 
 Paste `sample_data/sample_application.md` (or click **Load guided sample**), or upload a
 `.txt` / `.md` / `.csv` (250 KB max) — a completed copy of the broker intake sheet in
-`sample_data/` works well. Confirm the needs table, review the draft, change a severity
-and say why, approve the case, confirm the premium
-table (override a loading and see it disclosed), and accept the proposed playbook lesson.
-Assess a similar client and watch the next finding cite both the precedent case and the
-newly governed rule.
+`sample_data/` works well. Confirm the needs table (every required section needs a sum
+insured), change a rating on the price page and watch the premium move, open the review
+drill-down to say why, override a loading and see it disclosed, sign as "checked by" and
+approve. Assess a similar client and watch the next finding cite the precedent case —
+with your correction quoted in the prompt.
 
 Once a case is approved, **Save PDF copy** on the decision page (or `GET /cases/{id}/pdf`)
 downloads a client-facing report: `app/templates/case_pdf.html` rendered and converted with
-xhtml2pdf (pure Python, no browser needed). Internal codes — factor slugs, playbook rule
-ids, precedent ids, confidence, reviewer edits — are left out of it.
+xhtml2pdf (pure Python, no browser needed). Internal codes — factor slugs, precedent
+ids, confidence, reviewer edits — are left out of it; "Checked by" is on it.
 `sample_data/Converge-Underwriting-C-0002-XYZ-Shoes.pdf` is an example of the output.
 
-**Reset** on the case-memory page (`POST /demo/reset`) empties case memory and the
-playbook, keeping the archived playbook versions.
+**Reset** on the case-memory page (`POST /demo/reset`) empties case memory, deleted
+history included.
 
 ## Choosing the AI
 
@@ -111,10 +115,10 @@ The vendor lives in one file, `app/llm.py`, picked from the environment:
 | neither, `claude` CLI on PATH | Claude Code CLI on the machine's existing login — keyless, for local prompt iteration only |
 
 `LLM_PROVIDER`, `LLM_MODEL_MAIN`, `LLM_MODEL_FAST` override the defaults; `UW_CLI_TIMEOUT_S`
-(default 240) bounds a CLI call. "Main" handles needs determination, assessment and
-reflection; "fast" handles profile extraction, precedent retrieval and chat ingestion.
+(default 240) bounds a CLI call. "Main" handles needs determination and assessment;
+"fast" handles profile extraction, precedent retrieval and chat ingestion.
 Every call's tokens (and cost, where the provider reports it) are captured and
-shown on the review page. Adding a provider is one `_<name>_generate()` function in
+shown on the price page. Adding a provider is one `_<name>_generate()` function in
 `app/llm.py`.
 
 ## Test & evaluate
@@ -133,16 +137,16 @@ app/
   models.py        RiskFinding, SectionNeed, CaseRecord, … (Pydantic)
   needs.py         needs determination (which sections apply) — human gate 1 feeds on this
   sums.py          sum-insured extraction (transcribes stated figures; broker confirms at gate 1)
-  assess.py        per-section assessment (prompt = section scope + rules + precedents + document)
+  assess.py        per-section assessment (prompt = section scope + precedents with corrections + document)
   guardrails.py    deterministic evidence check, severity bands (case + per section), referrals
   pricing.py       deterministic pricing engine (sum insured × rate × band loading) — no LLM
-  memory.py        SQLite case store, retrieval, section-tagged playbook + reflection
+  memory.py        SQLite case store, section-scoped retrieval, soft delete
   main.py          FastAPI routes;  report.py + templates/  HTML rendering
   pdf.py           client-facing PDF of an approved case (templates/case_pdf.html + xhtml2pdf)
   ingest_chats.py  seed memory (provisional) from historical chats;  evaluate.py  eval harness
 config/            rates.json (base rate per section) + loadings.json (band → loading %) —
                    git-tracked, editable on /rates, placeholders until the broker's rate sheet
-data/              cases.db, playbook.md, playbook_history/  (git-ignored; safe to delete)
+data/              cases.db  (git-ignored; safe to delete)
 sample_data/       example application, blank broker intake sheet (PDF + text), example
                    PDF output, synthetic historical chats
 tests/             sections, needs, guardrails, memory, flow, review, UI, PDF, learning loop

@@ -9,7 +9,7 @@
   .trust-row { display:flex; gap:18px; margin-top:24px; flex-wrap:wrap; }
   .trust { display:flex; align-items:center; gap:8px; color:#486174; font-size:12px; font-weight:600; }
   .trust svg { width:17px; color:var(--brand); }
-  .metrics { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .metrics { display:grid; grid-template-columns:1fr; gap:12px; }
   .metric { min-height:126px; padding:21px; border:1px solid var(--line); border-radius:14px; background:rgba(255,255,255,.75); }
   .metric:first-child { grid-column:1/-1; background:linear-gradient(135deg,#16181f,#27203d); color:#fff; border:0; }
   .metric-value { font-size:31px; font-weight:700; letter-spacing:-.04em; }
@@ -47,16 +47,14 @@
     <div class="metrics">
       <div class="metric"><div class="metric-value">Human in control</div><div class="metric-label">AI drafts. Deterministic guardrails verify. Underwriters decide.</div></div>
       <div class="metric"><div class="metric-value">{{ case_count }}</div><div class="metric-label">Approved precedents</div></div>
-      <div class="metric"><div class="metric-value">{{ rule_count }}</div><div class="metric-label">Governed playbook rules</div></div>
     </div>
   </section>
 
   <section class="card">
     <div class="flow">
       <div class="flow-step"><span class="flow-num">01</span><strong>Needs</strong><span>Confirm the cover sections and sums insured that apply</span></div>
-      <div class="flow-step"><span class="flow-num">02</span><strong>Assess &amp; review</strong><span>Per-section, evidence-backed findings under your control</span></div>
-      <div class="flow-step"><span class="flow-num">03</span><strong>Price</strong><span>Deterministic premiums from broker base rates and band loadings</span></div>
-      <div class="flow-step"><span class="flow-num">04</span><strong>Learn</strong><span>Approve a governed playbook update</span></div>
+      <div class="flow-step"><span class="flow-num">02</span><strong>Assess</strong><span>Per-section, evidence-backed findings informed by approved precedents</span></div>
+      <div class="flow-step"><span class="flow-num">03</span><strong>Rate &amp; price</strong><span>Confirm each rating; deterministic premiums from broker base rates and band loadings</span></div>
     </div>
     <form id="assess-form" class="submission" action="/assess" method="post" enctype="multipart/form-data">
       <label for="raw_text">Application document or broker notes</label>
@@ -68,7 +66,7 @@
           <button type="submit">Begin assessment <span aria-hidden="true">→</span></button>
         </div>
       </div>
-      <div class="demo-tip"><span>✦</span><div><strong>Recommended demo journey</strong><span>Load the sample, adjust a finding during review, confirm the premium table, approve the proposed lesson, then assess a similar risk to see the new precedent in action.</span></div></div>
+      <div class="demo-tip"><span>✦</span><div><strong>Recommended demo journey</strong><span>Load the sample, confirm the needs table, change a rating on the price page and watch the premium move, approve, then assess a similar risk to see the new precedent in action.</span></div></div>
     </form>
   </section>
   {% if sample %}<template id="sample-text">{{ sample }}</template>{% endif %}

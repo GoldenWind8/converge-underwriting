@@ -4,8 +4,7 @@ Tiny eval harness (docs/SOLUTION_DESIGN.md §6.9): prove the system is learning.
     python -m app.evaluate
 
 For each stored case, rebuild a pseudo-application from its evidence and run
-the per-section assessor twice — memory OFF (no precedents, stub playbook) vs
-memory ON — then measure how many of the human-approved findings each run
+the per-section assessor twice — memory OFF (no precedents) vs memory ON — then measure how many of the human-approved findings each run
 recovered (matched on factor_name; severity agreement reported separately).
 
 The sections assessed are the case's confirmed needs table where it has one,
@@ -56,8 +55,7 @@ def needs_for(case: CaseRecord) -> list[SectionNeed]:
 @contextmanager
 def _held_out(case: CaseRecord):
     """Leave-one-out: remove the case from memory while it is being assessed,
-    so retrieval can't just find the answer key. (Playbook rules it contributed
-    remain — reported as a caveat below.)"""
+    so retrieval can't just find the answer key."""
     with memory._connect() as conn:
         conn.execute("DELETE FROM cases WHERE case_id = ?", (case.case_id,))
     try:
@@ -109,8 +107,7 @@ def main() -> None:
         print(f"  {label}          {r}/{t} ({pct(r, t)})          {s}/{t} ({pct(s, t)})")
     summary = llm.usage_summary()
     print("\n(Matched on factor_name against the human-approved findings, leave-one-out:")
-    print(" the case under test is removed from case memory while it is assessed.")
-    print(" Caveat: playbook rules it contributed remain in force.)")
+    print(" the case under test is removed from case memory while it is assessed.)")
     print(f"\nModel usage this run: {summary['calls']} call(s), "
           f"{summary['input_tokens'] + summary['output_tokens']} tokens"
           + (f", ${summary['cost_usd']:.2f}" if summary["cost_usd"] else "") + ".")

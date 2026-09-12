@@ -1,17 +1,17 @@
-"""Case memory, retrieval, playbook section filtering, and reflection
+"""Case memory: storage, section-scoped retrieval, and soft delete
 (with the LLM faked)."""
 
 from app import llm, memory
-from app.memory import _PlaybookUpdate, _RetrievalPick
+from app.memory import _RetrievalPick
 from app.models import (CaseRecord, ClientProfile, Correction, RiskFinding,
                         Severity)
 from app.sections import SectionId
 
 
 def _case(case_id="C-0001", industry="restaurant", factor="uncertified_gas_installation",
-          provisional=False) -> CaseRecord:
+          section=SectionId.fire, provisional=False) -> CaseRecord:
     finding = RiskFinding(
-        factor_name=factor, section=SectionId.fire, severity=Severity.high,
+        factor_name=factor, section=section, severity=Severity.high,
         evidence_quote="no gas certificate on file", reasoning="Uncertified gas installation.",
         confidence=1.0,
     )
@@ -36,8 +36,17 @@ def test_store_and_load_roundtrip():
     assert memory.next_case_id() == "C-0002"
 
 
+def test_old_records_with_playbook_fields_still_load():
+    stale = _case().model_dump()
+    stale["approved_findings"][0]["playbook_rule_ids"] = ["PB-001"]
+    stale["draft_findings"][0]["playbook_rule_ids"] = ["PB-001"]
+    loaded = CaseRecord.model_validate(stale)
+    assert loaded.approved_findings[0].factor_name == "uncertified_gas_installation"
+    assert not hasattr(loaded.approved_findings[0], "playbook_rule_ids")
+
+
 def test_retrieve_with_empty_memory_makes_no_llm_call(fake_llm):
-    assert memory.retrieve(ClientProfile(industry="florist"), k=3) == []
+    assert memory.retrieve(ClientProfile(industry="florist"), [SectionId.fire], k=3) == []
     assert fake_llm.calls == []
 
 
@@ -45,19 +54,38 @@ def test_retrieval_returns_the_llm_picks_in_order(fake_llm):
     memory.store(_case("C-0001", industry="restaurant"))
     memory.store(_case("C-0002", industry="panel beater"))
     fake_llm.register(_RetrievalPick, _RetrievalPick(case_ids=["C-0002", "C-0001"]))
-    hits = memory.retrieve(ClientProfile(industry="panel beater"), k=1)
+    hits = memory.retrieve(ClientProfile(industry="panel beater"), [SectionId.fire], k=1)
     assert [c.case_id for c in hits] == ["C-0002"]
+
+
+def test_retrieval_is_scoped_to_the_sections_being_assessed(fake_llm):
+    memory.store(_case("C-0001", section=SectionId.motor, factor="street_parked_overnight"))
+    memory.store(_case("C-0002", section=SectionId.fire))
+
+    # A Motor-only case is never a candidate for a Fire-only assessment.
+    fake_llm.register(_RetrievalPick, lambda system, user: _RetrievalPick(
+        case_ids=["C-0001", "C-0002"]))
+    hits = memory.retrieve(ClientProfile(industry="restaurant"), [SectionId.fire], k=5)
+    assert [c.case_id for c in hits] == ["C-0002"]
+    _, _, _, user = fake_llm.calls[-1]
+    assert "C-0001" not in user, "the picker never even sees the Motor case"
+    assert "Sections being assessed: Fire" in user
+
+    # With no case in the wanted sections there is nothing to pick from — no call.
+    fake_llm.calls.clear()
+    assert memory.retrieve(ClientProfile(industry="restaurant"), [SectionId.theft], k=5) == []
+    assert fake_llm.calls == []
 
 
 def test_provisional_cases_are_invisible_to_retrieval(fake_llm):
     memory.store(_case("C-0001", provisional=True))
     # No active cases -> no model call, no precedents.
-    assert memory.retrieve(ClientProfile(industry="restaurant"), k=3) == []
+    assert memory.retrieve(ClientProfile(industry="restaurant"), [SectionId.fire], k=3) == []
     assert fake_llm.calls == []
 
     memory.confirm_case("C-0001")
     fake_llm.register(_RetrievalPick, _RetrievalPick(case_ids=["C-0001"]))
-    hits = memory.retrieve(ClientProfile(industry="restaurant"), k=3)
+    hits = memory.retrieve(ClientProfile(industry="restaurant"), [SectionId.fire], k=3)
     assert [c.case_id for c in hits] == ["C-0001"]
 
 
@@ -68,76 +96,21 @@ def test_retrieval_failure_returns_no_precedents(monkeypatch):
         raise RuntimeError("provider down")
 
     monkeypatch.setattr(llm, "generate", boom)
-    assert memory.retrieve(ClientProfile(industry="restaurant"), k=3) == []
+    assert memory.retrieve(ClientProfile(industry="restaurant"), [SectionId.fire], k=3) == []
 
 
-PLAYBOOK = """# Underwriting Playbook
+def test_soft_delete_keeps_the_record_but_removes_it_from_memory(fake_llm):
+    memory.store(_case("C-0001"))
+    memory.store(_case("C-0002", industry="bakery"))
 
-Some preamble.
+    deleted = memory.delete_case("C-0001", "Cameron", "Duplicate of C-0002.")
 
-## PB-001 · [fire] gas installations
-Absence of a certificate is HIGH.
-Supporting cases: C-0001
-
-## PB-002 · [theft] cash on site overnight
-Refer when takings sleep on the premises.
-Supporting cases: C-0002
-
-## PB-003 · [general] silent submissions
-A submission silent on security is a consider, not a pass.
-Supporting cases: C-0003
-
-## PB-004 · untagged legacy rule
-Kept for every section until it is retagged.
-Supporting cases: C-0004
-"""
-
-
-def test_rules_are_filtered_to_their_section():
-    fire = memory.rules_for_section(PLAYBOOK, SectionId.fire)
-    assert "PB-001" in fire
-    assert "PB-002" not in fire  # the Theft lesson is structurally unable to reach Fire
-    assert "PB-003" in fire      # general applies everywhere
-    assert "PB-004" in fire      # untagged rules are kept on purpose
-    assert "Some preamble." in fire
-
-    theft = memory.rules_for_section(PLAYBOOK, SectionId.theft)
-    assert "PB-002" in theft
-    assert "PB-001" not in theft
-
-
-def test_rules_filter_handles_a_playbook_with_no_rules():
-    assert "no lessons" in memory.rules_for_section(memory.PLAYBOOK_STUB, SectionId.fire).lower()
-
-
-def test_reflection_proposal_waits_for_human_approval(fake_llm):
-    original = memory.load_playbook()
-    updated = original + "\n## PB-001 · [fire] proposed lesson\nTreat as HIGH.\nSupporting cases: C-0001\n"
-    fake_llm.register(_PlaybookUpdate, _PlaybookUpdate(
-        playbook_markdown=updated, change_note="Proposed PB-001."))
-
-    proposal = memory.propose_reflection(_case())
-
-    assert proposal is not None
-    assert "PB-001" in proposal.proposed_playbook
-    assert memory.load_playbook() == original, "proposal must not silently change policy"
-
-
-def test_reflection_prompt_carries_the_reviewers_why_note(fake_llm):
-    fake_llm.register(_PlaybookUpdate, _PlaybookUpdate(
-        playbook_markdown=memory.load_playbook(), change_note="nothing"))
-    memory.propose_reflection(_case())
-    _, _, _, user = fake_llm.calls[-1]
-    assert "Gas plus no certificate is never medium." in user
-
-
-def test_reflection_is_noop_when_playbook_unchanged(fake_llm):
-    fake_llm.register(_PlaybookUpdate, _PlaybookUpdate(
-        playbook_markdown=memory.load_playbook(), change_note="nothing to learn"))
-    assert memory.propose_reflection(_case()) is None
-
-
-def test_save_playbook_keeps_history():
-    memory.load_playbook()
-    memory.save_playbook("# Underwriting Playbook\n\n## PB-001 · [fire] x\nLesson.\n")
-    assert list((memory.data_dir() / "playbook_history").glob("*.md")), "old version must be archived"
+    assert deleted.deleted_by == "Cameron" and deleted.deleted_reason == "Duplicate of C-0002."
+    assert deleted.deleted_at
+    assert [c.case_id for c in memory.all_cases()] == ["C-0002"]
+    assert [c.case_id for c in memory.deleted_cases()] == ["C-0001"]
+    assert memory.get_case("C-0001") is not None, "the report stays readable"
+    assert memory.retrieve(ClientProfile(industry="restaurant"), [SectionId.fire], k=3) == [] or \
+        all(c.case_id != "C-0001" for c in memory.active_cases())
+    assert memory.next_case_id() == "C-0003", "IDs never reuse a deleted case's number"
+    assert memory.delete_case("C-9999", "x", "y") is None

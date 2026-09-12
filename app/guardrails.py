@@ -8,8 +8,8 @@ No LLM here — an underwriter can reproduce everything in this file by hand.
      source document is DROPPED (kills hallucinated evidence). Quotes that are
      too short or made only of stopwords are also dropped: the word "Yes"
      appearing somewhere in a form is not evidence of anything.
-  2. Citation allow-list — precedent/rule citations not actually supplied to
-     the model are removed and referred.
+  2. Citation allow-list — precedent citations not actually supplied to the
+     model are removed and referred.
   3. Band mapping — the severity profile -> referral band. Categorical only;
      there is deliberately no score anywhere in this system.
   4. Referral triggers — low confidence, novel findings, and severe findings
@@ -118,20 +118,11 @@ def apply(draft: RiskAssessmentDraft, raw_text: str) -> GuardrailResult:
             result.dropped.append((f, "evidence quote too short or generic to evidence a finding"))
             continue
         precedent_ids = f.precedent_case_ids
-        rule_ids = f.playbook_rule_ids
         if draft._retrieved_case_ids is not None:
             invalid = [cid for cid in precedent_ids if cid not in draft._retrieved_case_ids]
             result.invalid_citations.extend(f"{f.factor_name}: unknown precedent {cid}" for cid in invalid)
             precedent_ids = [cid for cid in precedent_ids if cid in draft._retrieved_case_ids]
-        if draft._available_rule_ids is not None:
-            available_rules = {rid.upper() for rid in draft._available_rule_ids}
-            invalid = [rid for rid in rule_ids if rid.upper() not in available_rules]
-            result.invalid_citations.extend(f"{f.factor_name}: unknown rule {rid}" for rid in invalid)
-            rule_ids = [rid.upper() for rid in rule_ids if rid.upper() in available_rules]
-        result.findings.append(f.model_copy(update={
-            "precedent_case_ids": precedent_ids,
-            "playbook_rule_ids": rule_ids,
-        }))
+        result.findings.append(f.model_copy(update={"precedent_case_ids": precedent_ids}))
 
     # Section order first (as the needs analysis lists them), worst first within.
     result.findings.sort(key=lambda f: (section(f.section).number, -SEVERITY_ORDER[f.severity]))
@@ -149,11 +140,10 @@ def apply(draft: RiskAssessmentDraft, raw_text: str) -> GuardrailResult:
             "Low-confidence finding(s) — human review required: " + ", ".join(low_conf) + "."
         )
 
-    novel = [f.factor_name for f in result.findings
-             if not f.precedent_case_ids and not f.playbook_rule_ids]
+    novel = [f.factor_name for f in result.findings if not f.precedent_case_ids]
     if novel:
         result.referrals.append(
-            "NOVEL finding(s) with no precedent case or playbook rule — human review required: "
+            "NOVEL finding(s) with no precedent case — human review required: "
             + ", ".join(novel) + "."
         )
 

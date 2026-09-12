@@ -3,24 +3,27 @@ Rendering: templates in, HTML out. No logic beyond display grouping.
 
 - index.html     landing page (with an optional one-click sample application)
 - needs.html     the needs determination table (human gate 1)
-- review.html    editable draft (human gate 2)
+- pricing.html   the Price gate (human gate 2): ratings + premiums, and the
+                 post-approval "adjust pricing" view of a stored case
+- review.html    findings with evidence — drill-down from the Price gate
 - report.html    final report for an approved case
-- cases.html     case-memory listing
-- playbook.html  the current playbook
+- cases.html     case-memory listing (+ the deleted history log)
 """
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .guardrails import GuardrailResult
-from .memory import LearningProposal
-from .models import (CaseRecord, NeedsDetermination, RiskAssessmentDraft,
-                     RiskFinding, SectionNeed)
+from .models import (CasePricing, CaseRecord, ClientProfile,
+                     NeedsDetermination, RiskAssessmentDraft, RiskFinding,
+                     SectionNeed)
+from .pricing import config_dir, load_loadings, load_rates
 from .sections import (COVER_SECTIONS, MOTOR_SUB_TYPE_NOTES, SectionId,
                        section)
 
@@ -32,12 +35,40 @@ def _rand(value) -> str:
     return "R " + f"{round(value):,}".replace(",", " ")
 
 
+def load_factor_labels() -> Dict[str, str]:
+    """Optional snake_case factor -> plain-English label overrides
+    (config/factor_labels.json). Factors not listed are humanised."""
+    path = config_dir() / "factor_labels.json"
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _label(factor_name: str) -> str:
+    """'uncertified_gas_installation' -> 'Uncertified gas installation',
+    unless the labels file says otherwise. Storage stays snake_case."""
+    override = load_factor_labels().get(factor_name)
+    if override:
+        return override
+    return factor_name.replace("_", " ").strip().capitalize()
+
+
+def _short(finding: RiskFinding) -> str:
+    """One-line description for the Price gate: the assessment note, else the
+    first sentence of the reasoning."""
+    if finding.assessment_note:
+        return finding.assessment_note
+    return re.split(r"(?<=[.!?])\s", finding.reasoning.strip(), maxsplit=1)[0]
+
+
 _TEMPLATES = Path(__file__).parent / "templates"
 _env = Environment(
     loader=FileSystemLoader(str(_TEMPLATES)),
     autoescape=select_autoescape(["html"]),
 )
 _env.filters["rand"] = _rand
+_env.filters["label"] = _label
+_env.filters["short"] = _short
 _env.globals.update(
     cover_sections=COVER_SECTIONS,
     motor_sub_type_notes=MOTOR_SUB_TYPE_NOTES,
@@ -62,10 +93,8 @@ def _section_groups(findings: List[RiskFinding], needs: List[SectionNeed]) -> li
     return groups
 
 
-def render_index(sample: str = "", case_count: int = 0, rule_count: int = 0) -> str:
-    return _env.get_template("index.html").render(
-        sample=sample, case_count=case_count, rule_count=rule_count
-    )
+def render_index(sample: str = "", case_count: int = 0) -> str:
+    return _env.get_template("index.html").render(sample=sample, case_count=case_count)
 
 
 def render_needs(needs_id: str, determination: NeedsDetermination, profile,
@@ -89,50 +118,39 @@ def render_review(draft_id: str, draft: RiskAssessmentDraft, result: GuardrailRe
     )
 
 
-def render_report(case: CaseRecord, engine: str, generated_at: str,
-                  learning_note: Optional[str] = None,
-                  learning_proposal: Optional[LearningProposal] = None) -> str:
+def render_report(case: CaseRecord, engine: str, generated_at: str) -> str:
     return _env.get_template("report.html").render(
         case=case, engine=engine, generated_at=generated_at,
-        learning_note=learning_note, learning_proposal=learning_proposal,
         groups=_section_groups(case.approved_findings, case.needs),
     )
 
 
-def render_pricing(case: CaseRecord, generated_at: str) -> str:
-    """The Price gate (human gate 3). Justification bullets per line come from
-    the case's approved findings, grouped by section."""
-    findings_by_section: dict = {}
-    for f in case.approved_findings:
-        findings_by_section.setdefault(f.section, []).append(f)
+def render_pricing(priced: CasePricing, findings: List[RiskFinding], generated_at: str,
+                   draft_id: Optional[str] = None, profile: Optional[ClientProfile] = None,
+                   usage: Optional[dict] = None, case: Optional[CaseRecord] = None) -> str:
+    """The Price gate. With draft_id: the approval gate for an unstored draft
+    (ratings editable). With case: adjusting a stored case's pricing (ratings
+    read-only). Findings are listed per section with their global index —
+    the severity_<i> form fields are indexed over the flat list."""
+    by_section: dict = {}
+    for index, f in enumerate(findings):
+        by_section.setdefault(f.section, []).append((index, f))
     return _env.get_template("pricing.html").render(
-        case=case, pricing=case.pricing, generated_at=generated_at,
-        findings_by_section=findings_by_section,
+        pricing=priced, findings_by_section=by_section, generated_at=generated_at,
+        draft_id=draft_id, case=case, profile=profile or (case.client_profile if case else None),
+        usage=usage, rates=load_rates(), loadings=load_loadings(),
     )
 
 
-def render_rates(rates: dict, loadings: dict, saved: bool = False) -> str:
+def render_rates(rates: dict, loadings: dict, saved: bool = False, back: str = "") -> str:
     band_order = ["Low", "Moderate", "Elevated", "High"]
     return _env.get_template("rates.html").render(
-        rates=rates, loadings=loadings, band_order=band_order, saved=saved,
+        rates=rates, loadings=loadings, band_order=band_order, saved=saved, back=back,
     )
 
 
-def render_cases(cases: List[CaseRecord]) -> str:
-    return _env.get_template("cases.html").render(cases=cases)
-
-
-def render_playbook(playbook: str) -> str:
-    rules = []
-    matches = list(re.finditer(r"^##\s+(PB-\d+)\s*[·\-–—:]?\s*(.*)$", playbook, re.MULTILINE | re.IGNORECASE))
-    for index, match in enumerate(matches):
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(playbook)
-        rules.append({
-            "id": match.group(1).upper(),
-            "title": match.group(2).strip(),
-            "body": playbook[match.end():end].strip(),
-        })
-    return _env.get_template("playbook.html").render(playbook=playbook, rules=rules)
+def render_cases(cases: List[CaseRecord], deleted: Optional[List[CaseRecord]] = None) -> str:
+    return _env.get_template("cases.html").render(cases=cases, deleted=deleted or [])
 
 
 def render_error(title: str, message: str, retry_href: str = "/") -> str:

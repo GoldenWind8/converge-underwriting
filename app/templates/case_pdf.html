@@ -37,7 +37,6 @@
   .pricing td { border-bottom: 1px solid #eceef3; font-size: 9pt; }
   .pricing .r { text-align: right; }
   .pricing .total td { border-top: 2px solid #dfe1e8; border-bottom: 0; font-weight: bold; }
-  .pricing .muted-row td { color: #646875; }
   .pband-Low { color: #208567; font-weight: bold; } .pband-Moderate { color: #b47913; font-weight: bold; }
   .pband-Elevated { color: #c65b21; font-weight: bold; } .pband-High { color: #b83c3c; font-weight: bold; }
   .override { font-size: 7.5pt; color: #765819; }
@@ -54,7 +53,7 @@
 <body>
 
 <div id="footer">
-  Converge Underwriting · Risk assessment report · {{ case.case_id }} · Page <pdf:pagenumber /> of <pdf:pagecount />
+  Converge Underwriting · Risk assessment report · {{ case.case_id }}{% if case.checked_by %} · Checked by {{ case.checked_by }}{% endif %} · Page <pdf:pagenumber /> of <pdf:pagecount />
 </div>
 
 {% if logo_path %}<img src="{{ logo_path }}" width="180" alt="Converge Underwriting" /><br /><br />{% endif %}
@@ -68,6 +67,7 @@
   <tr><td class="k">Assessment date</td><td>{{ case.created_at[:10] }}</td></tr>
   <tr><td class="k">Report generated</td><td>{{ generated_at }}</td></tr>
   <tr><td class="k">Employees</td><td>{{ case.client_profile.employees if case.client_profile.employees is not none else "Not stated" }}</td></tr>
+  {% if case.checked_by %}<tr><td class="k">Checked by</td><td>{{ case.checked_by }}</td></tr>{% endif %}
 </table>
 
 <h2>Overview</h2>
@@ -101,7 +101,7 @@
 <h3>{{ group.cover.number }}. {{ group.cover.name }}</h3>
 {% for index, f in group["items"] %}
 <table class="finding"><tr><td>
-  <span class="finding-title">{{ f.factor_name|replace("_", " ")|capitalize }}</span>
+  <span class="finding-title">{{ f.factor_name|label }}</span>
   &nbsp; <span class="sev sev-{{ f.severity.value }}">{{ f.severity.value }} severity</span>
   {% if f.assessment_note %}<div class="note">{{ f.assessment_note }}</div>{% endif %}
   <p style="margin-top:3pt">{{ f.reasoning }}</p>
@@ -112,17 +112,14 @@
 <p class="muted">No risk factors were recorded for this case.</p>
 {% endfor %}
 
-{% if case.pricing and case.pricing.lines %}
+{% set priced = case.pricing.lines|rejectattr("base_premium", "none")|list if case.pricing else [] %}
+{% if priced %}
 <h2>Premium calculation</h2>
 <p class="small muted">Each premium is calculated deterministically: sum insured &times; base rate &times; band loading. The loading follows the section's assessed risk band; any manual adjustment by the underwriter is disclosed against the band table value.</p>
 <table class="pricing">
   <tr><th style="width:21%">Section</th><th class="r" style="width:14%">Sum insured</th><th class="r" style="width:8%">Rate</th><th class="r" style="width:14%">Base premium</th><th style="width:11%">Band</th><th class="r" style="width:14%">Loading</th><th class="r" style="width:18%">Adjusted premium</th></tr>
-  {% for line in case.pricing.lines %}
-  {% if line.base_premium is none %}
-  <tr class="muted-row"><td>{{ section(line.section).name }}</td><td class="r">Not stated</td><td class="r">{{ "%g"|format(line.rate) }}%</td><td class="r">&mdash;</td><td class="pband-{{ line.band }}">{{ line.band }}</td><td class="r">{{ "%+g"|format(line.table_loading) }}%</td><td class="r">Not priced &mdash; sum insured not provided</td></tr>
-  {% else %}
+  {% for line in priced %}
   <tr><td>{{ section(line.section).name }}</td><td class="r">{{ line.sum_insured|rand|replace(" ", "&nbsp;")|safe }}</td><td class="r">{{ "%g"|format(line.rate) }}%</td><td class="r">{{ line.base_premium|rand|replace(" ", "&nbsp;")|safe }}</td><td class="pband-{{ line.band }}">{{ line.band }}</td><td class="r">{{ "%+g"|format(line.applied_loading) }}%{% if line.overridden %}<br /><span class="override">manual &mdash; band table: {{ "%+g"|format(line.table_loading) }}%</span>{% endif %}</td><td class="r">{{ line.adjusted_premium|rand|replace(" ", "&nbsp;")|safe }}</td></tr>
-  {% endif %}
   {% endfor %}
   <tr class="total"><td>Total, per annum</td><td>&nbsp;</td><td>&nbsp;</td><td class="r">{{ case.pricing.base_total|rand|replace(" ", "&nbsp;")|safe }}</td><td>&nbsp;</td><td>&nbsp;</td><td class="r">{{ case.pricing.adjusted_total|rand|replace(" ", "&nbsp;")|safe }}</td></tr>
 </table>
@@ -130,7 +127,7 @@
 
 <div class="disclaimer">
   This report records a risk assessment reviewed and approved by an underwriter.
-  {% if case.pricing and case.pricing.lines %}Premiums shown are indicative, calculated deterministically from broker-supplied
+  {% if priced %}Premiums shown are indicative, calculated deterministically from broker-supplied
   base rates and the assessed risk band; they are not a binding quotation and do not constitute cover.{% else %}It is not a
   quotation, does not constitute cover, and states no premium, rate or sum insured.{% endif %}
   Converge AI (Pty) Ltd · Johannesburg, South Africa · convergeai.co.za

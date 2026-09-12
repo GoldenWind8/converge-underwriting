@@ -33,30 +33,30 @@ from .sections import SectionId, section
 BANDS = ["Low", "Moderate", "Elevated", "High"]
 
 # Base rates: annual % of sum insured, flat per section. Sourced from the
-# broker's rate sheet of 2026-09-01 ("base rates" at the repo root); ranges
-# entered at their midpoint — the band loading covers the spread the broker
-# prices by feel. "basis" says what figure the rate applies to plus any caveat
-# from the sheet — shown on the Rates page. Sections the sheet left blank
-# carry a placeholder, marked as such.
+# broker's rate sheet of 2026-09-01; ranges entered at their midpoint — the
+# band loading covers the spread the broker prices by feel. "basis" says what
+# figure the rate applies to plus any caveat from the sheet — shown on the
+# Rates page. Sections the sheet left blank carry "placeholder": true until
+# the broker confirms a figure (the Rates page shows them in bold).
 DEFAULT_RATES: Dict[str, dict] = {
-    "buildings-combined": {"rate": 0.20, "basis": "Building value — assumed at the Fire and Allied Perils rate; confirm with broker"},
+    "buildings-combined": {"rate": 0.20, "basis": "Building value — assumed at the Fire and Allied Perils rate", "placeholder": True},
     "fire": {"rate": 0.20, "basis": "Plant, stock and contents (Fire and Allied Perils)"},
     "business-interruption": {"rate": 0.20, "basis": "Gross profit — 12 to 24 month indemnity; shorter periods: 25% of the Fire rate"},
     "office-contents": {"rate": 2.00, "basis": "Contents value — forcible/violent-entry theft extension rated at 5%"},
     "glass": {"rate": 6.50, "basis": "Replacement value (sheet range 5–8%)"},
-    "accounts-receivable": {"rate": 0.30, "basis": "Debtors outstanding — placeholder; awaiting broker rate"},
-    "fidelity": {"rate": 0.50, "basis": "Limit of indemnity — placeholder; broker rates on sum insured and employee count"},
+    "accounts-receivable": {"rate": 0.30, "basis": "Debtors outstanding", "placeholder": True},
+    "fidelity": {"rate": 0.50, "basis": "Limit of indemnity — broker rates on sum insured and employee count", "placeholder": True},
     "theft": {"rate": 9.00, "basis": "Stock at risk, typically a first-loss limit (sheet range 8–10%)"},
     "money": {"rate": 8.00, "basis": "Maximum cash on premises"},
     "goods-in-transit": {"rate": 9.00, "basis": "Maximum load per vehicle (sheet range 8–10%)"},
     "electronic-equipment": {"rate": 7.50, "basis": "Equipment value (sheet range 5–10%; laptops 10–12%)"},
     "business-all-risks": {"rate": 7.50, "basis": "Portable items value (sheet range 5–10%)"},
-    "group-personal-accident": {"rate": 0.80, "basis": "Aggregate benefit — placeholder; awaiting broker rate"},
-    "motor": {"rate": 4.00, "basis": "Fleet value — placeholder; broker rates vary by sum insured"},
-    "motor-traders": {"rate": 3.00, "basis": "Vehicles in custody — placeholder; awaiting broker rate"},
+    "group-personal-accident": {"rate": 0.80, "basis": "Aggregate benefit", "placeholder": True},
+    "motor": {"rate": 4.00, "basis": "Fleet value — broker rates vary by sum insured", "placeholder": True},
+    "motor-traders": {"rate": 3.00, "basis": "Vehicles in custody", "placeholder": True},
     "public-liability": {"rate": 0.00833, "basis": "Limit of indemnity — R83.33 per R1 000 000 (Public and Employees Liability)"},
-    "broadform-liability": {"rate": 0.01, "basis": "Limit of indemnity — placeholder; sheet rates Public and Employees Liability together"},
-    "umbrella-liability": {"rate": 0.005, "basis": "Limit of indemnity — placeholder; awaiting broker rate"},
+    "broadform-liability": {"rate": 0.01, "basis": "Limit of indemnity — sheet rates Public and Employees Liability together", "placeholder": True},
+    "umbrella-liability": {"rate": 0.005, "basis": "Limit of indemnity", "placeholder": True},
 }
 
 DEFAULT_LOADINGS: Dict[str, float] = {
@@ -67,13 +67,13 @@ DEFAULT_LOADINGS: Dict[str, float] = {
 }
 
 
-def _config_dir() -> Path:
+def config_dir() -> Path:
     return Path(os.environ.get("UW_CONFIG_DIR", Path(__file__).resolve().parent.parent / "config"))
 
 
 def _load(filename: str, defaults: dict) -> dict:
     """Read a config file, creating it with the defaults on first use."""
-    path = _config_dir() / filename
+    path = config_dir() / filename
     if not path.exists():
         _save(filename, defaults)
         return json.loads(json.dumps(defaults))
@@ -81,7 +81,7 @@ def _load(filename: str, defaults: dict) -> dict:
 
 
 def _save(filename: str, payload: dict) -> None:
-    path = _config_dir() / filename
+    path = config_dir() / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

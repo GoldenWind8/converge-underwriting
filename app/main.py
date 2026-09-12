@@ -1,22 +1,26 @@
 """
 FastAPI app — plumbing only; the interesting logic lives in needs.py,
-assess.py, guardrails.py and memory.py.
+assess.py, guardrails.py, pricing.py and memory.py.
 
-The loop (four human gates):
-  POST /assess          raw text -> profile + needs determination + stated
-                        sums insured -> needs table
-  POST /needs/{id}      GATE 1: the underwriter's confirmed table (sections +
-                        sums insured) -> one assessment call per required
-                        section -> guardrails -> editable review page
-  POST /approve         GATE 2: reviewer's edits -> CaseRecord stored with a
-                        deterministic pricing draft -> Price gate
-  POST /cases/{id}/pricing  GATE 3: loadings confirmed/overridden -> pricing
-                        saved on the case -> report + learning proposal
-  POST /learning/{id}   GATE 4: accept / edit / skip the playbook update
-  GET  /cases           browse memory;  GET /cases/{id} re-renders a stored report
-  GET  /cases/{id}/pdf  client-facing PDF copy of a stored case (HTML -> xhtml2pdf)
-  GET  /playbook        the current playbook
-  GET/POST /rates       base rates + band loadings config (config/*.json)
+The loop (two human gates, one drill-down):
+  POST /assess                raw text -> profile + needs determination +
+                              stated sums insured -> needs table
+  POST /needs/{id}            GATE 1: the underwriter's confirmed table
+                              (sections + a sum insured for each) -> one
+                              assessment call per required section ->
+                              guardrails -> the Price gate
+  GET  /drafts/{id}/price     GATE 2: findings per section with editable
+                              ratings, the deterministic premium table,
+                              "checked by" and "add to case memory"
+  POST /drafts/{id}/price     approve: rating edits become corrections, the
+                              CaseRecord is stored with its pricing -> report
+  GET/POST /review/{id}       drill-down from the Price gate: evidence, add or
+                              remove findings, save and go back
+  GET/POST /cases/{id}/pricing  adjust the pricing of a stored case
+  GET  /cases                 browse memory;  GET /cases/{id} re-renders a report
+  GET  /cases/{id}/pdf        client-facing PDF copy of a stored case
+  POST /cases/{id}/delete     soft delete with who + why
+  GET/POST /rates             base rates + band loadings config (config/*.json)
 
 Drafts awaiting a gate are held in memory (PENDING_NEEDS, DRAFTS) — fine for a
 single-process POC.
@@ -24,6 +28,7 @@ single-process POC.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as _dt
 import re
 import uuid
@@ -41,13 +46,12 @@ from .models import (CaseRecord, Correction, Requirement, RiskFinding,
 from .needs import determine_needs
 from .pdf import case_pdf, pdf_filename
 from .report import (render_cases, render_error, render_index, render_needs,
-                     render_playbook, render_pricing, render_rates,
-                     render_report, render_review)
+                     render_pricing, render_rates, render_report,
+                     render_review)
 from .sections import MotorSubType, SectionId, section
 from .sums import extract_sums
 
 llm.require()  # no LLM configured -> fail here, at startup, with a clear message
-
 app = FastAPI(title="Converge Underwriting POC")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
@@ -57,10 +61,11 @@ _MAX_INPUT_BYTES = 250_000
 
 # needs_id -> {"determination": ..., "profile": ..., "sums": ..., "engine": ..., "raw_text": ...}
 PENDING_NEEDS: dict = {}
-# draft_id -> {"draft": ..., "result": ..., "engine": ..., "raw_text": ..., "needs": ..., "sums": ..., "usage": ...}
+# draft_id -> {"draft": ..., "result": ..., "findings": ..., "corrections": ..., "engine": ...,
+#              "raw_text": ..., "needs": ..., "sums": ..., "usage": ...}
+# "result" is the untouched guardrail output; "findings" is the working list the
+# review drill-down edits, and "corrections" the diff so far.
 DRAFTS: dict = {}
-PENDING_LEARNING: dict[str, memory.LearningProposal] = {}
-LEARNING_NOTES: dict[str, str] = {}  # case_id -> note when the proposal failed
 
 
 def _now() -> str:
@@ -91,9 +96,7 @@ def _parse_amount(raw: Optional[str]) -> Optional[int]:
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
-    cases = memory.all_cases()
-    rules = set(re.findall(r"\bPB-\d+\b", memory.load_playbook(), flags=re.IGNORECASE))
-    return HTMLResponse(render_index(_SAMPLE, len(cases), len(rules)))
+    return HTMLResponse(render_index(_SAMPLE, len(memory.all_cases())))
 
 
 @app.post("/assess", response_class=HTMLResponse)
@@ -130,8 +133,8 @@ def resume_needs(needs_id: str) -> HTMLResponse:
     ))
 
 
-@app.post("/needs/{needs_id}", response_class=HTMLResponse)
-async def confirm_needs(needs_id: str, request: Request) -> HTMLResponse:
+@app.post("/needs/{needs_id}")
+async def confirm_needs(needs_id: str, request: Request) -> Response:
     """Human gate 1: the underwriter's confirmed table drives the assessment."""
     pending = PENDING_NEEDS.get(needs_id)
     if pending is None:
@@ -161,10 +164,24 @@ async def confirm_needs(needs_id: str, request: Request) -> HTMLResponse:
         basis = extracted.basis if amount == extracted.amount else "Entered by the broker at the needs gate."
         confirmed_sums.append(SumInsured(section=section_id, amount=amount, basis=basis if amount is not None else ""))
 
-    if not any(n.requirement == Requirement.required for n in confirmed):
+    # Keep the edits so a rejected form comes back the way the broker left it.
+    pending["determination"] = pending["determination"].model_copy(update={"needs": confirmed})
+    pending["sums"] = {s.section: s for s in confirmed_sums}
+
+    required = [n for n in confirmed if n.requirement == Requirement.required]
+    if not required:
         return HTMLResponse(
             render_error("No sections marked required",
                          "Mark at least one cover section as required before assessing.",
+                         f"/needs/{needs_id}"),
+            status_code=400,
+        )
+    missing = [section(n.section).name for n in required if pending["sums"][n.section].amount is None]
+    if missing:
+        return HTMLResponse(
+            render_error("Sum insured missing",
+                         "Every required section needs a sum insured before it can be priced: "
+                         + ", ".join(missing) + ".",
                          f"/needs/{needs_id}"),
             status_code=400,
         )
@@ -179,47 +196,57 @@ async def confirm_needs(needs_id: str, request: Request) -> HTMLResponse:
         )
     draft_id = uuid.uuid4().hex[:12]
     DRAFTS[draft_id] = {
-        "draft": draft, "result": result, "engine": engine,
-        "raw_text": pending["raw_text"], "needs": confirmed,
+        "draft": draft, "result": result, "findings": list(result.findings), "corrections": [],
+        "engine": engine, "raw_text": pending["raw_text"], "needs": confirmed,
         "sums": confirmed_sums, "usage": llm.usage_summary(),
     }
     PENDING_NEEDS.pop(needs_id, None)
-    return HTMLResponse(render_review(
-        draft_id, draft, result, engine, _now(), pending["raw_text"],
-        confirmed, DRAFTS[draft_id]["usage"],
-    ))
+    return RedirectResponse(url=f"/drafts/{draft_id}/price", status_code=303)
 
 
-@app.get("/review/{draft_id}", response_class=HTMLResponse)
-def resume_review(draft_id: str) -> HTMLResponse:
+# --------------------------------------------------------------------------- #
+# The Price gate (gate 2) and its review drill-down
+# --------------------------------------------------------------------------- #
+def _draft(draft_id: str) -> dict:
     pending = DRAFTS.get(draft_id)
     if pending is None:
         raise HTTPException(status_code=404, detail="Draft not found (it may have expired or been approved).")
-    return HTMLResponse(render_review(
-        draft_id, pending["draft"], pending["result"], pending["engine"],
-        _now(), pending["raw_text"], pending["needs"], pending.get("usage"),
+    return pending
+
+
+@app.get("/drafts/{draft_id}/price", response_class=HTMLResponse)
+def price_draft(draft_id: str) -> HTMLResponse:
+    pending = _draft(draft_id)
+    priced = pricing.price_case(pending["needs"], pending["findings"], pending["sums"])
+    return HTMLResponse(render_pricing(
+        priced, pending["findings"], _now(), draft_id=draft_id,
+        profile=pending["draft"].client_profile, usage=pending.get("usage"),
     ))
 
 
-@app.post("/approve", response_class=HTMLResponse)
-async def approve(request: Request) -> HTMLResponse:
+@app.post("/drafts/{draft_id}/price")
+async def approve_draft(draft_id: str, request: Request) -> Response:
+    """Approve: rating edits become corrections, pricing is recomputed
+    server-side, and the case is stored — provisional if the underwriter
+    chose not to add it to case memory."""
+    pending = _draft(draft_id)
     form = await request.form()
-    draft_id = form.get("draft_id", "")
-    pending = DRAFTS.get(draft_id)
-    if pending is None:
-        raise HTTPException(status_code=404, detail="Draft not found (already approved, or server restarted).")
+    back = f"/drafts/{draft_id}/price"
 
-    draft, result = pending["draft"], pending["result"]
-    try:
-        approved, corrections = _apply_review(form, result.findings, pending["raw_text"])
-    except HTTPException as exc:
+    checked_by = (form.get("checked_by") or "").strip()
+    if not checked_by:
         return HTMLResponse(
-            render_error("Review needs attention", str(exc.detail), f"/review/{draft_id}"),
-            status_code=exc.status_code,
+            render_error("Checked by is required", "Enter the name of the underwriter approving this case.", back),
+            status_code=400,
         )
+    approved, corrections = _apply_ratings(form, pending["findings"])
+    overrides = _loading_overrides(form, pending["needs"])
+    if isinstance(overrides, str):
+        return HTMLResponse(render_error("Pricing needs attention", overrides, back), status_code=400)
 
     approved.sort(key=lambda f: (section(f.section).number,
                                  -guardrails.SEVERITY_ORDER[f.severity]))
+    draft, result = pending["draft"], pending["result"]
     case = CaseRecord(
         case_id=memory.next_case_id(),
         created_at=_dt.datetime.now().isoformat(timespec="seconds"),
@@ -229,43 +256,87 @@ async def approve(request: Request) -> HTMLResponse:
         needs=pending["needs"],
         draft_findings=result.findings,
         approved_findings=approved,
-        corrections=corrections,
+        corrections=pending["corrections"] + corrections,
         final_band=guardrails.band_for_findings(approved),
+        checked_by=checked_by,
+        pricing=pricing.price_case(pending["needs"], approved, pending["sums"], overrides),
+        provisional=form.get("add_to_memory") is None,
     )
-    # Deterministic pricing draft from the approved findings and the sums the
-    # broker confirmed at gate 1. Loadings come from the band table; the Price
-    # gate is where the underwriter confirms or overrides them.
-    case.pricing = pricing.price_case(pending["needs"], approved, pending.get("sums", []))
     memory.store(case)
     DRAFTS.pop(draft_id, None)
+    return RedirectResponse(url=f"/cases/{case.case_id}", status_code=303)
+
+
+@app.get("/review/{draft_id}", response_class=HTMLResponse)
+def review_draft(draft_id: str) -> HTMLResponse:
+    pending = _draft(draft_id)
+    result = dataclasses.replace(
+        pending["result"], findings=pending["findings"],
+        band=guardrails.band_for_findings(pending["findings"]),
+    )
+    return HTMLResponse(render_review(
+        draft_id, pending["draft"], result, pending["engine"],
+        _now(), pending["raw_text"], pending["needs"], pending.get("usage"),
+    ))
+
+
+@app.post("/review/{draft_id}")
+async def save_review(draft_id: str, request: Request) -> Response:
+    """The drill-down's edits go back into the draft; the Price gate re-prices them."""
+    pending = _draft(draft_id)
+    form = await request.form()
     try:
-        proposal = memory.propose_reflection(case)
-        if proposal is not None:
-            PENDING_LEARNING[case.case_id] = proposal
-    except Exception:
-        LEARNING_NOTES[case.case_id] = (
-            "Case approved. The learning proposal is temporarily unavailable and can be retried later."
+        findings, corrections = _apply_review(form, pending["findings"], pending["raw_text"])
+    except HTTPException as exc:
+        return HTMLResponse(
+            render_error("Review needs attention", str(exc.detail), f"/review/{draft_id}"),
+            status_code=exc.status_code,
         )
-    return RedirectResponse(url=f"/cases/{case.case_id}/pricing", status_code=303)
+    findings.sort(key=lambda f: (section(f.section).number,
+                                 -guardrails.SEVERITY_ORDER[f.severity]))
+    pending["findings"] = findings
+    pending["corrections"] = pending["corrections"] + corrections
+    return RedirectResponse(url=f"/drafts/{draft_id}/price", status_code=303)
+
+
+def _rating(form, index: int, finding: RiskFinding) -> tuple:
+    """One finding's severity from the form -> (finding, correction or None)."""
+    severity = Severity(form.get(f"severity_{index}", finding.severity.value))
+    if severity == finding.severity:
+        return finding, None
+    correction = Correction(
+        type="severity_changed", factor_name=finding.factor_name,
+        detail=f"{finding.severity.value} -> {severity.value}",
+        note=(form.get(f"note_{index}") or "").strip(),
+    )
+    return finding.model_copy(update={"severity": severity}), correction
+
+
+def _apply_ratings(form, findings) -> tuple:
+    """The Price gate's rating edits: every finding is kept, severities may change."""
+    approved, corrections = [], []
+    for i, f in enumerate(findings):
+        rated, correction = _rating(form, i, f)
+        approved.append(rated)
+        if correction:
+            corrections.append(correction)
+    return approved, corrections
 
 
 def _apply_review(form, draft_findings, raw_text: str = "") -> tuple:
-    """Turn the review form back into approved findings + a corrections diff.
+    """Turn the review form back into findings + a corrections diff.
     Every correction can carry the reviewer's own 'why' note, remembered verbatim."""
     approved, corrections = [], []
 
     for i, f in enumerate(draft_findings):
-        note = (form.get(f"note_{i}") or "").strip()
         if form.get(f"keep_{i}") is None:
+            note = (form.get(f"note_{i}") or "").strip()
             corrections.append(Correction(type="removed", factor_name=f.factor_name, note=note))
             continue
-        severity = Severity(form.get(f"severity_{i}", f.severity.value))
-        if severity != f.severity:
-            corrections.append(Correction(
-                type="severity_changed", factor_name=f.factor_name,
-                detail=f"{f.severity.value} -> {severity.value}", note=note,
-            ))
-        approved.append(f.model_copy(update={"severity": severity}))
+        rated, correction = _rating(form, i, f)
+        approved.append(rated)
+        if correction:
+            corrections.append(correction)
 
     new_name = (form.get("new_factor_name") or "").strip().lower().replace(" ", "_")
     if new_name:
@@ -296,22 +367,41 @@ def _apply_review(form, draft_findings, raw_text: str = "") -> tuple:
     return approved, corrections
 
 
+def _loading_overrides(form, needs) -> dict | str:
+    """loading_<section> fields -> {section: %}. Returns an error message
+    instead when a value is not a number."""
+    overrides: dict = {}
+    for need in needs:
+        if need.requirement != Requirement.required:
+            continue
+        raw = (form.get(f"loading_{need.section.value}") or "").strip()
+        if not raw:
+            continue
+        try:
+            overrides[need.section] = float(raw)
+        except ValueError:
+            return f"The loading for {section(need.section).name} is not a number: {raw!r}."
+    return overrides
+
+
+# --------------------------------------------------------------------------- #
+# Stored cases
+# --------------------------------------------------------------------------- #
 @app.get("/cases/{case_id}/pricing", response_class=HTMLResponse)
-def pricing_gate(case_id: str) -> HTMLResponse:
-    """Human gate 3: the deterministic premium per required section, loadings
-    confirmable or overridable before the case report is finalised."""
+def pricing_page(case_id: str) -> HTMLResponse:
+    """Adjust the pricing of a stored case: loadings only, ratings read-only."""
     case = memory.get_case(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found.")
     if case.pricing is None:
-        # Pre-pricing case (old or chat-ingested): draft a table now. No sums
-        # were confirmed at a needs gate, so every line shows as not priced.
+        # Chat-ingested case: no sums were confirmed at a needs gate, so
+        # nothing is priced. The table drafted here shows only the bands.
         case.pricing = pricing.price_case(case.needs, case.approved_findings, [])
-    return HTMLResponse(render_pricing(case, _now()))
+    return HTMLResponse(render_pricing(case.pricing, case.approved_findings, _now(), case=case))
 
 
-@app.post("/cases/{case_id}/pricing", response_class=HTMLResponse)
-async def save_case_pricing(case_id: str, request: Request) -> HTMLResponse:
+@app.post("/cases/{case_id}/pricing")
+async def save_case_pricing(case_id: str, request: Request) -> Response:
     case = memory.get_case(case_id)
     if case is None or case.pricing is None:
         raise HTTPException(status_code=404, detail="Case not found.")
@@ -321,30 +411,30 @@ async def save_case_pricing(case_id: str, request: Request) -> HTMLResponse:
     # config — the form only carries the loadings the underwriter settled on.
     sums = [SumInsured(section=l.section, amount=l.sum_insured, basis=l.basis)
             for l in case.pricing.lines]
-    overrides: dict = {}
-    for line in case.pricing.lines:
-        raw = (form.get(f"loading_{line.section.value}") or "").strip()
-        if not raw:
-            continue
-        try:
-            overrides[line.section] = float(raw)
-        except ValueError:
-            return HTMLResponse(
-                render_error("Pricing needs attention",
-                             f"The loading for {section(line.section).name} is not a number: {raw!r}.",
-                             f"/cases/{case_id}/pricing"),
-                status_code=400,
-            )
+    overrides = _loading_overrides(form, case.needs)
+    if isinstance(overrides, str):
+        return HTMLResponse(
+            render_error("Pricing needs attention", overrides, f"/cases/{case_id}/pricing"),
+            status_code=400,
+        )
     case.pricing = pricing.price_case(case.needs, case.approved_findings, sums, overrides)
+    if (form.get("checked_by") or "").strip():
+        case.checked_by = form.get("checked_by").strip()
     memory.store(case)
-    return HTMLResponse(render_report(
-        case, "stored", _now(), LEARNING_NOTES.pop(case_id, None), PENDING_LEARNING.get(case_id)
-    ))
+    return RedirectResponse(url=f"/cases/{case_id}", status_code=303)
+
+
+def _local_path(value: Optional[str]) -> str:
+    """Only a same-site path may be a 'go back' target."""
+    value = (value or "").strip()
+    return value if value.startswith("/") and not value.startswith("//") else ""
 
 
 @app.get("/rates", response_class=HTMLResponse)
-def rates_page(saved: int = 0) -> HTMLResponse:
-    return HTMLResponse(render_rates(pricing.load_rates(), pricing.load_loadings(), bool(saved)))
+def rates_page(saved: int = 0, next: str = "") -> HTMLResponse:
+    return HTMLResponse(render_rates(
+        pricing.load_rates(), pricing.load_loadings(), bool(saved), _local_path(next),
+    ))
 
 
 @app.post("/rates")
@@ -359,6 +449,8 @@ async def save_rates_config(request: Request) -> Response:
                 entry["rate"] = float(raw)
                 if entry["rate"] < 0:
                     raise ValueError(f"the {section(SectionId(section_id)).name} rate cannot be negative")
+            if entry.get("placeholder") and form.get(f"confirmed_{section_id}"):
+                entry.pop("placeholder")  # broker confirmed the figure
         for band in pricing.BANDS:
             raw = (form.get(f"loading_{band}") or "").strip()
             if raw:
@@ -370,35 +462,15 @@ async def save_rates_config(request: Request) -> Response:
         )
     pricing.save_rates(rates)
     pricing.save_loadings(loadings)
-    return RedirectResponse(url="/rates?saved=1", status_code=303)
-
-
-@app.post("/learning/{case_id}", response_class=HTMLResponse)
-async def decide_learning(case_id: str, request: Request) -> HTMLResponse:
-    case = memory.get_case(case_id)
-    proposal = PENDING_LEARNING.get(case_id)
-    if case is None:
-        raise HTTPException(status_code=404, detail="Case not found.")
-    if proposal is None:
-        return HTMLResponse(render_report(case, "stored", _now(), "No pending learning proposal."))
-
-    form = await request.form()
-    action = form.get("action", "skip")
-    if action == "accept":
-        edited = (form.get("proposed_playbook") or "").strip()
-        if not edited:
-            raise HTTPException(status_code=400, detail="The playbook update cannot be empty.")
-        memory.save_playbook(edited + "\n")
-        note = proposal.change_note + (" Edited and approved by the underwriter." if edited != proposal.proposed_playbook.strip() else " Approved by the underwriter.")
-    else:
-        note = "Playbook update skipped. The approved case remains available as a precedent."
-    PENDING_LEARNING.pop(case_id, None)
-    return HTMLResponse(render_report(case, "stored", _now(), note))
+    back = _local_path(form.get("next"))
+    if form.get("action") == "back" and back:
+        return RedirectResponse(url=back, status_code=303)
+    return RedirectResponse(url="/rates?saved=1" + (f"&next={back}" if back else ""), status_code=303)
 
 
 @app.get("/cases", response_class=HTMLResponse)
 def cases() -> HTMLResponse:
-    return HTMLResponse(render_cases(memory.all_cases()))
+    return HTMLResponse(render_cases(memory.all_cases(), memory.deleted_cases()))
 
 
 @app.get("/cases/{case_id}", response_class=HTMLResponse)
@@ -423,15 +495,28 @@ def case_pdf_download(case_id: str) -> Response:
 
 @app.post("/cases/{case_id}/confirm")
 def confirm_ingested_case(case_id: str) -> RedirectResponse:
-    """Human confirmation of a provisional (chat-ingested) case — docs/SOLUTION_DESIGN.md §4.4."""
+    """Human confirmation of a provisional case — docs/SOLUTION_DESIGN.md §4.4."""
     if memory.confirm_case(case_id) is None:
         raise HTTPException(status_code=404, detail="Case not found.")
     return RedirectResponse(url="/cases", status_code=303)
 
 
-@app.get("/playbook", response_class=HTMLResponse)
-def playbook() -> HTMLResponse:
-    return HTMLResponse(render_playbook(memory.load_playbook()))
+@app.post("/cases/{case_id}/delete")
+async def delete_case(case_id: str, request: Request) -> Response:
+    """Soft delete with a name and a reason; the row stays in the history log."""
+    form = await request.form()
+    deleted_by = (form.get("deleted_by") or "").strip()
+    reason = (form.get("reason") or "").strip()
+    if not deleted_by or not reason:
+        return HTMLResponse(
+            render_error("Deletion needs a name and a reason",
+                         "Say who is deleting the case and why — both are kept in the history log.",
+                         f"/cases/{case_id}"),
+            status_code=400,
+        )
+    if memory.delete_case(case_id, deleted_by, reason) is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+    return RedirectResponse(url="/cases", status_code=303)
 
 
 @app.post("/demo/reset")
@@ -439,6 +524,4 @@ def reset_demo() -> RedirectResponse:
     memory.reset_demo_data()
     PENDING_NEEDS.clear()
     DRAFTS.clear()
-    PENDING_LEARNING.clear()
-    LEARNING_NOTES.clear()
     return RedirectResponse(url="/", status_code=303)

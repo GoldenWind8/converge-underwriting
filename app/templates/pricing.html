@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Pricing {{ case.case_id }} — Converge Underwriting{% endblock %}
+{% block title %}{% if case %}Pricing {{ case.case_id }}{% else %}Price {{ profile.business_name or "assessment" }}{% endif %} — Converge Underwriting{% endblock %}
 {% block wrap_class %}wide{% endblock %}
 {% block css %}
 <style>
@@ -28,38 +28,47 @@
   tr.why td { padding:4px 14px 15px 54px; background:#fbfcfd; }
   .why-line { margin:7px 0 6px; font-size:12px; font-weight:700; color:var(--navy-900); }
   .why-line .pill { margin-left:8px; }
-  tr.why ul { margin:0; padding-left:18px; }
-  tr.why li { margin-bottom:4px; font-size:12.5px; }
-  .unpriced td { color:var(--muted); }
+  .findings { max-width:900px; margin-top:6px; background:#fff; border:1px solid var(--line-soft); border-radius:9px; overflow:hidden; }
+  .findings th { padding:7px 12px; font-size:9px; }
+  .findings td { padding:8px 12px; font-size:12.5px; vertical-align:middle; }
+  .findings td.ident { font-weight:600; white-space:nowrap; }
+  .findings td.rating { width:130px; }
+  .findings td.rating select { padding:6px 8px; font-size:12px; }
+  .findings td.desc { color:#40596b; }
   tfoot td { padding:14px; background:#f8fafb; border-top:2px solid var(--line); border-bottom:0; font-weight:700; }
-  .commit-bar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:18px; padding:14px 16px; border:1px solid #bcc5fb; border-radius:12px; background:#f7f7ff; }
-  .commit-bar strong { display:block; font-size:12px; } .commit-bar span { color:var(--muted); font-size:11px; }
+  .commit-bar { position:sticky; bottom:12px; z-index:20; display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-top:18px; padding:14px 16px; border:1px solid #bcc5fb; border-radius:12px; background:rgba(247,247,255,.95); box-shadow:0 12px 35px rgba(15,17,32,.16); backdrop-filter:blur(14px); }
+  .commit-fields { display:flex; align-items:flex-end; gap:18px; }
+  .commit-fields input[type=text] { width:220px; }
+  .commit-fields .check { display:flex; align-items:center; gap:7px; margin:0 0 10px; font-size:12px; font-weight:600; }
+  .commit-fields .check input { accent-color:var(--brand); }
   .actions { display:flex; gap:9px; }
+  .usage-line { margin-top:10px; color:var(--muted-2); font-size:10px; text-align:right; }
   @media(max-width:1000px){.totals{grid-template-columns:1fr 1fr}.stepper{display:none}}
-  @media(max-width:700px){.pricing-top{flex-direction:column;align-items:flex-start}.totals{grid-template-columns:1fr}.commit-bar{flex-direction:column;align-items:stretch}.actions{flex-direction:column}}
+  @media(max-width:700px){.pricing-top{flex-direction:column;align-items:flex-start}.totals{grid-template-columns:1fr}.commit-bar,.commit-fields{flex-direction:column;align-items:stretch}.actions{flex-direction:column}.commit-fields input[type=text]{width:100%}}
 </style>
 {% endblock %}
 {% block content %}
+  {% set priced = pricing.lines|rejectattr("base_premium", "none")|list %}
   <div class="pricing-top">
     <div>
-      <div class="eyebrow">Pricing engine · Human gate 3</div>
-      <h1>{{ case.client_profile.business_name or "Unnamed applicant" }}</h1>
-      <p class="sub" style="margin:0">Case {{ case.case_id }} · Annual premiums, ZAR · {{ generated_at }}</p>
+      <div class="eyebrow">{% if case %}Adjust pricing{% else %}Pricing engine · Human gate 2{% endif %}</div>
+      <h1>{{ profile.business_name if profile and profile.business_name else "Unnamed applicant" }}</h1>
+      <p class="sub" style="margin:0">{% if case %}Case {{ case.case_id }} · {% endif %}Annual premiums, ZAR · {{ generated_at }}</p>
     </div>
-    <div class="stepper"><span class="step done"><span class="step-num">✓</span>Submit</span><span class="step done"><span class="step-num">✓</span>Needs</span><span class="step done"><span class="step-num">✓</span>Review</span><span class="step active"><span class="step-num">4</span>Price</span><span class="step"><span class="step-num">5</span>Learn</span></div>
+    <div class="stepper"><span class="step done"><span class="step-num">✓</span>Submit</span><span class="step done"><span class="step-num">✓</span>Needs</span><span class="step active"><span class="step-num">3</span>Price</span></div>
   </div>
 
   <div class="totals">
     <div class="card tile"><div class="lbl">Base premium</div><div class="val" id="t-base">{{ pricing.base_total|rand }}</div></div>
     <div class="card tile"><div class="lbl">Adjusted premium</div><div class="val adj" id="t-adj">{{ pricing.adjusted_total|rand }}</div><div class="sub2" id="t-delta"></div></div>
-    <div class="card tile"><div class="lbl">Sections priced</div><div class="val">{{ pricing.lines|rejectattr("base_premium", "none")|list|length }} of {{ pricing.lines|length }}</div>{% set unpriced = pricing.lines|selectattr("base_premium", "none")|list %}{% if unpriced %}<div class="sub2">Awaiting sum insured: {% for l in unpriced %}{{ section(l.section).name }}{% if not loop.last %}, {% endif %}{% endfor %}</div>{% endif %}</div>
+    <div class="card tile"><div class="lbl">Sections priced</div><div class="val">{{ priced|length }}</div>{% if priced|length != pricing.lines|length %}<div class="sub2">{{ pricing.lines|length - priced|length }} required section(s) have no sum insured and are not priced.</div>{% endif %}</div>
     <div class="card tile"><div class="lbl">Manual overrides</div><div class="val" id="t-overrides">{{ pricing.lines|selectattr("overridden")|list|length }}</div></div>
   </div>
 
-  <form action="/cases/{{ case.case_id }}/pricing" method="post">
+  <form action="{% if case %}/cases/{{ case.case_id }}/pricing{% else %}/drafts/{{ draft_id }}/price{% endif %}" method="post" id="price-form">
     <div class="card">
       <div class="panel-head">
-        <h2>Premium by cover section</h2>
+        <div><h2>Premium by cover section</h2><div class="hint">{% if case %}Ratings are fixed on an approved case; loadings can still be adjusted.{% else %}Change a rating and the section re-bands and re-prices instantly — no model call.{% endif %}</div></div>
         <span class="pill"><span class="mono">sum insured × rate × (1 + loading)</span></span>
       </div>
       <div style="overflow-x:auto">
@@ -69,47 +78,43 @@
           <th class="r">Base premium</th><th>Band</th><th>Loading</th><th class="r">Adjusted premium</th>
         </tr></thead>
         <tbody id="rows">
-          {% for line in pricing.lines %}{% set cover = section(line.section) %}
-          {% if line.base_premium is none %}
-          <tr class="unpriced">
-            <td></td>
-            <td class="sec" style="color:var(--ink)">{{ cover.number }}. {{ cover.name }}</td>
-            <td class="r" style="font-size:12px">Not stated at the needs gate</td>
-            <td class="r">{{ "%g"|format(line.rate) }}%</td>
-            <td class="r">—</td>
-            <td><span class="band {{ line.band }}">{{ line.band }}</span></td>
-            <td class="muted">{{ "%+g"|format(line.table_loading) }}%</td>
-            <td class="r">Not priced</td>
-          </tr>
-          {% else %}
+          {% for line in priced %}{% set cover = section(line.section) %}
           <tr class="priced-row" data-section="{{ line.section.value }}" data-base="{{ line.base_premium }}" data-table="{{ line.table_loading }}">
-            <td><button class="row-toggle" type="button" aria-label="Show justification for {{ cover.name }}" aria-expanded="false">▸</button></td>
+            <td><button class="row-toggle" type="button" aria-label="Toggle findings for {{ cover.name }}" aria-expanded="true">▾</button></td>
             <td class="sec">{{ cover.number }}. {{ cover.name }}</td>
             <td class="r">{{ line.sum_insured|rand }}</td>
-            <td class="r">{{ "%g"|format(line.rate) }}%</td>
+            <td class="r">{{ "%g"|format(line.rate) }}%{% if rates[line.section.value].placeholder %} <span class="pill confirm" title="Placeholder rate — confirm with the broker">confirm</span>{% endif %}</td>
             <td class="r">{{ line.base_premium|rand }}</td>
             <td><span class="band {{ line.band }}">{{ line.band }}</span></td>
             <td><div class="loading-cell">
-              <input type="number" step="1" name="loading_{{ line.section.value }}" value="{{ "%g"|format(line.applied_loading) }}" aria-label="Loading percent for {{ cover.name }}" />
+              <input type="number" step="1" name="loading_{{ line.section.value }}" value="{{ "%g"|format(line.applied_loading) }}" aria-label="Loading percent for {{ cover.name }}" {% if line.overridden %}data-manual="1"{% endif %} />
               <span class="unit">%</span>
               <span class="pill manual" {% if not line.overridden %}hidden{% endif %}>manual</span>
             </div></td>
             <td class="r adjusted" style="font-weight:600">{{ line.adjusted_premium|rand }}</td>
           </tr>
-          <tr class="why" hidden>
+          <tr class="why">
             <td colspan="8">
-              <div class="why-line"><span class="adj-word">{% if line.applied_loading > 0 %}Loaded +{{ "%g"|format(line.applied_loading) }}%{% elif line.applied_loading < 0 %}Discounted {{ "%g"|format(line.applied_loading) }}%{% else %}No adjustment{% endif %}</span> — rated {{ line.band }}<span class="pill manual table-note" {% if not line.overridden %}hidden{% endif %}>manual — band table: {{ "%+g"|format(line.table_loading) }}%</span></div>
+              <div class="why-line"><span class="adj-word">{% if line.applied_loading > 0 %}Loaded +{{ "%g"|format(line.applied_loading) }}%{% elif line.applied_loading < 0 %}Discounted {{ "%g"|format(line.applied_loading) }}%{% else %}No adjustment{% endif %}</span> — rated <span class="band-word">{{ line.band }}</span><span class="pill manual table-note" {% if not line.overridden %}hidden{% endif %}>manual — band table: <span class="table-value">{{ "%+g"|format(line.table_loading) }}%</span></span></div>
               {% if line.basis %}<div class="hint" style="margin-bottom:6px">Sum insured basis: {{ line.basis }}</div>{% endif %}
-              <ul>
-                {% for f in findings_by_section.get(line.section, []) %}
-                <li><span class="mono">{{ f.factor_name }}</span> <span class="severity {{ f.severity.value }}">{{ f.severity.value }}</span></li>
+              <table class="findings">
+                <thead><tr><th>Risk factor</th><th>Rating</th><th>Description</th></tr></thead>
+                <tbody>
+                {% for index, f in findings_by_section.get(line.section, []) %}
+                <tr>
+                  <td class="ident">{{ f.factor_name|label }}</td>
+                  <td class="rating">{% if case %}<span class="severity {{ f.severity.value }}">{{ f.severity.value }}</span>{% else %}<select class="severity-input" name="severity_{{ index }}" aria-label="Rating for {{ f.factor_name|label }}">{% for s in severity_values %}<option value="{{ s }}" {% if f.severity.value == s %}selected{% endif %}>{{ s|title }}</option>{% endfor %}</select>{% endif %}</td>
+                  <td class="desc">{{ f|short }}</td>
+                </tr>
                 {% else %}
-                <li class="muted">No approved findings in this section — banded Low.</li>
+                <tr><td colspan="3" class="muted">No findings in this section — banded Low.</td></tr>
                 {% endfor %}
-              </ul>
+                </tbody>
+              </table>
             </td>
           </tr>
-          {% endif %}
+          {% else %}
+          <tr><td colspan="8" class="empty">Nothing to price: no required section has a sum insured.</td></tr>
           {% endfor %}
         </tbody>
         <tfoot><tr>
@@ -122,30 +127,61 @@
     </div>
 
     <div class="commit-bar">
-      <div><strong>Save pricing for {{ case.case_id }}</strong><span>Stored with the case and shown on the report and client PDF. Premiums are recalculated from the confirmed figures when you save.</span></div>
-      <div class="actions"><a class="btn secondary" href="/rates">Base rates &amp; loadings</a><button type="submit">Save pricing &amp; continue <span aria-hidden="true">→</span></button></div>
+      <div class="commit-fields">
+        <div><label for="checked_by">Checked by</label><input type="text" id="checked_by" name="checked_by" required placeholder="Underwriter name" value="{{ case.checked_by if case else "" }}" /></div>
+        {% if not case %}<label class="check"><input type="checkbox" name="add_to_memory" checked /> Add to case memory</label>{% endif %}
+      </div>
+      <div class="actions">
+        {% if case %}
+        <a class="btn secondary" href="/cases/{{ case.case_id }}">Back to report</a>
+        <a class="btn secondary" href="/rates?next=/cases/{{ case.case_id }}/pricing">Base rates &amp; loadings</a>
+        <button type="submit">Save pricing <span aria-hidden="true">→</span></button>
+        {% else %}
+        <a class="btn secondary" href="/review/{{ draft_id }}">Review findings &amp; evidence</a>
+        <a class="btn secondary" href="/rates?next=/drafts/{{ draft_id }}/price">Base rates &amp; loadings</a>
+        <button type="submit">Approve &amp; price <span aria-hidden="true">→</span></button>
+        {% endif %}
+      </div>
     </div>
+    {% if usage and usage.calls %}<div class="usage-line">{{ usage.calls }} model call(s){% if usage.input_tokens or usage.output_tokens %} · {{ usage.input_tokens + usage.output_tokens }} tokens{% endif %}{% if usage.cost_usd %} · ${{ "%.2f"|format(usage.cost_usd) }}{% endif %} this run</div>{% endif %}
   </form>
 {% endblock %}
 {% block scripts %}
 <script>
-  // Mirrors pricing.price_case for instant feedback; the saved premiums are
-  // recomputed server-side from the same formula.
+  // Mirrors guardrails.band_for_section + pricing.price_case for instant
+  // feedback; the saved ratings and premiums are recomputed server-side.
+  const LOADINGS={{ loadings|tojson }};
   const ZAR=n=>'R '+Math.round(n).toLocaleString('en-US').replace(/,/g,' ');
+  const signed=v=>(v>=0?'+':'')+v+'%';
+  function bandFor(counts){
+    if(counts.severe>=1||counts.high>=3)return 'High';
+    if(counts.high>=1||counts.medium>=3)return 'Elevated';
+    if(counts.medium>=1)return 'Moderate';
+    return 'Low';
+  }
+  function reband(row){
+    const why=row.nextElementSibling,counts={low:0,medium:0,high:0,severe:0};
+    why.querySelectorAll('.severity-input').forEach(s=>counts[s.value]++);
+    const band=bandFor(counts),table=Number(LOADINGS[band]);
+    row.dataset.table=table;
+    const pill=row.querySelector('.band');pill.textContent=band;pill.className='band '+band;
+    why.querySelector('.band-word').textContent=band;
+    why.querySelector('.table-value').textContent=signed(table);
+    const input=row.querySelector('input[type=number]');
+    if(!input.dataset.manual)input.value=table;
+  }
   function recalc(){
     let base=0,adj=0,overrides=0;
     document.querySelectorAll('.priced-row').forEach(row=>{
       const b=Number(row.dataset.base),table=Number(row.dataset.table);
-      const v=Number(row.querySelector('input').value)||0;
+      const v=Number(row.querySelector('input[type=number]').value)||0;
       const a=b*(1+v/100);
       row.querySelector('.adjusted').textContent=ZAR(a);
       const manual=v!==table;
       row.querySelector('.pill.manual').hidden=!manual;
       const why=row.nextElementSibling;
-      if(why&&why.classList.contains('why')){
-        why.querySelector('.table-note').hidden=!manual;
-        why.querySelector('.adj-word').textContent=v>0?('Loaded +'+v+'%'):v<0?('Discounted '+v+'%'):'No adjustment';
-      }
+      why.querySelector('.table-note').hidden=!manual;
+      why.querySelector('.adj-word').textContent=v>0?('Loaded +'+v+'%'):v<0?('Discounted '+v+'%'):'No adjustment';
       if(manual)overrides++;
       base+=b;adj+=a;
     });
@@ -163,7 +199,8 @@
       el.append(span,' vs base');
     }
   }
-  document.querySelectorAll('.priced-row input').forEach(i=>i.addEventListener('input',recalc));
+  document.querySelectorAll('.priced-row input[type=number]').forEach(i=>i.addEventListener('input',()=>{i.dataset.manual='1';recalc();}));
+  document.querySelectorAll('.severity-input').forEach(s=>s.addEventListener('change',()=>{reband(s.closest('tr.why').previousElementSibling);recalc();}));
   document.querySelectorAll('.row-toggle').forEach(btn=>btn.addEventListener('click',()=>{
     const why=btn.closest('tr').nextElementSibling;
     why.hidden=!why.hidden;

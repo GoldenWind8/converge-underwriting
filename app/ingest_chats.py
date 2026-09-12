@@ -9,8 +9,7 @@ underwriter actually decided on -> stored as a PROVISIONAL CaseRecord
 
 Governance (docs/SOLUTION_DESIGN.md §4.4): LLM-extracted cases never enter
 the live memory ungated. They are stored provisional — invisible to retrieval —
-until a human confirms each one on the /cases page, and ingestion never writes
-to the playbook.
+until a human confirms each one on the /cases page.
 """
 
 from __future__ import annotations

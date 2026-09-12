@@ -21,9 +21,9 @@ CASE = CaseRecord(
         severity=Severity.high, assessment_note="Below standard for a manufacturing occupancy.",
         evidence_quote="Electrical CoC current, and dated: No",
         reasoning="An uncertified installation is an unmanaged ignition source.",
-        precedent_case_ids=["C-0001"], playbook_rule_ids=["PB-001"], confidence=0.9,
+        precedent_case_ids=["C-0001"], confidence=0.9,
     )],
-    final_band="Elevated",
+    final_band="Elevated", checked_by="Sashin",
 )
 
 
@@ -33,7 +33,8 @@ def test_pdf_html_is_client_facing():
     assert "XYZ Shoes" in html and "Elevated risk" in html
     assert "Uncertified electrical installation" in html, "factor titles are humanised"
     assert "uncertified_electrical_installation" not in html, "no internal slugs"
-    assert "PB-001" not in html and "C-0001" not in html, "no rule or precedent codes"
+    assert "C-0001" not in html, "no precedent codes"
+    assert "Checked by Sashin" in html
     assert "2. Fire" in html
     assert "Not applicable" not in html, "not-applicable sections stay off the client PDF"
     assert "Glass" not in html
@@ -61,7 +62,7 @@ def test_pdf_shows_the_premium_table_and_discloses_overrides():
     assert "Premium calculation" in html
     assert "R 72 000" in html and "R 82 800" in html
     assert "band table: +10%" in html, "a manual override is disclosed against the table value"
-    assert "Not priced" in html and "sum insured not provided" in html
+    assert "Fidelity" not in html and "Not priced" not in html, "unpriced lines stay off the client PDF"
     assert "not a binding quotation" in html
 
 

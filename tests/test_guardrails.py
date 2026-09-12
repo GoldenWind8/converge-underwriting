@@ -24,7 +24,6 @@ def _finding(**overrides) -> RiskFinding:
         evidence_quote="Fire extinguishers: No",
         reasoning="No first-response fire protection.",
         precedent_case_ids=["C-0001"],
-        playbook_rule_ids=[],
         confidence=0.9,
     )
     base.update(overrides)
@@ -84,7 +83,7 @@ def test_severe_finding_triggers_referral():
 
 
 def test_novel_finding_triggers_referral():
-    novel = _finding(precedent_case_ids=[], playbook_rule_ids=[])
+    novel = _finding(precedent_case_ids=[])
     result = apply(_draft(novel), DOC)
     assert any("NOVEL" in r for r in result.referrals)
 
@@ -105,16 +104,12 @@ def test_findings_sorted_by_section_order_then_severity():
 
 
 def test_unverified_audit_citations_are_removed_and_referred():
-    draft = _draft(_finding(
-        precedent_case_ids=["C-9999"], playbook_rule_ids=["PB-999"]
-    ))
+    draft = _draft(_finding(precedent_case_ids=["C-9999"]))
     draft._retrieved_case_ids = {"C-0001"}
-    draft._available_rule_ids = {"PB-001"}
 
     result = apply(draft, DOC)
 
     assert result.findings[0].precedent_case_ids == []
-    assert result.findings[0].playbook_rule_ids == []
-    assert len(result.invalid_citations) == 2
+    assert len(result.invalid_citations) == 1
     assert any("Unverified audit" in referral for referral in result.referrals)
     assert any("NOVEL" in referral for referral in result.referrals)

@@ -1,6 +1,6 @@
 """End-to-end test of the loop with a fake LLM: needs -> per-section assess ->
-guardrails -> approve -> reflect -> the next assessment's prompt contains what
-was learned, scoped to the right section."""
+guardrails -> approve -> the next assessment's prompt contains what was
+learned, scoped to the right section."""
 
 import threading
 from pathlib import Path
@@ -8,7 +8,7 @@ from pathlib import Path
 from app import guardrails, memory
 from app.assess import assess_sections
 from app.ingest_chats import IngestedCase, ingest_file
-from app.memory import _PlaybookUpdate, _RetrievalPick
+from app.memory import _RetrievalPick
 from app.models import (CaseRecord, ClientProfile, Correction, Requirement,
                         RiskFinding, SectionAssessment, SectionNeed, Severity)
 from app.sections import SectionId
@@ -82,60 +82,67 @@ def test_not_applicable_sections_are_not_assessed(fake_llm):
     assert len([c for c in fake_llm.calls if c[0] == "SectionAssessment"]) == 1
 
 
-def test_correction_reaches_the_next_assessment_prompt_for_its_section(fake_llm):
-    # --- round 1: assess, reviewer bumps severity, approve ------------------
+def _approved_case(fake_llm) -> CaseRecord:
+    """Round 1: assess, reviewer bumps severity with a why-note and removes a
+    Motor finding, approve."""
     fake_llm.register(SectionAssessment, SectionAssessment(findings=[_finding()]))
-    draft, _ = assess_sections(RAW, PROFILE, [_need(SectionId.fire)])
+    draft, _ = assess_sections(RAW, PROFILE, [_need(SectionId.fire), _need(SectionId.motor)])
     result = guardrails.apply(draft, RAW)
 
-    approved = [f.model_copy(update={"severity": Severity.high}) for f in result.findings]
+    approved = [f.model_copy(update={"severity": Severity.high})
+                for f in result.findings if f.section == SectionId.fire]
     case = CaseRecord(
         case_id=memory.next_case_id(), created_at="2026-07-09T10:00:00", source="assessment",
         client_profile=PROFILE, summary=PROFILE.summary,
         draft_findings=result.findings, approved_findings=approved,
-        corrections=[Correction(type="severity_changed",
-                                factor_name="uncertified_gas_installation",
-                                detail="medium -> high", note="Never medium without a certificate.")],
+        corrections=[
+            Correction(type="severity_changed", factor_name="uncertified_gas_installation",
+                       detail="medium -> high", note="Never medium without a certificate."),
+            Correction(type="removed", factor_name="uncertified_gas_installation",
+                       note="Gas is a Fire matter, not Motor."),
+        ],
         final_band=guardrails.band_for_findings(approved),
     )
     memory.store(case)
+    return case
 
-    # --- gate 3: the underwriter accepts the proposed lesson ----------------
-    lesson = "## PB-001 · [fire] food service — gas installations\nAbsence of a certificate is HIGH.\nSupporting cases: C-0001\n"
-    fake_llm.register(_PlaybookUpdate, _PlaybookUpdate(
-        playbook_markdown=memory.PLAYBOOK_STUB + "\n" + lesson, change_note="Added PB-001."))
-    proposal = memory.propose_reflection(case)
-    assert proposal is not None
-    memory.save_playbook(proposal.proposed_playbook)
 
-    # --- round 2: the Fire prompt must carry the lesson and the precedent ---
-    fake_llm.register(_RetrievalPick, _RetrievalPick(case_ids=["C-0001"]))
+def test_correction_reaches_the_next_assessment_prompt_for_its_section(fake_llm):
+    case = _approved_case(fake_llm)
+
+    # Round 2: the Fire prompt carries the precedent with the reviewer's change.
+    fake_llm.register(_RetrievalPick, _RetrievalPick(case_ids=[case.case_id]))
     fake_llm.register(SectionAssessment, SectionAssessment(
-        findings=[_finding(severity=Severity.high,
-                           precedent_case_ids=["C-0001"], playbook_rule_ids=["PB-001"])],
+        findings=[_finding(severity=Severity.high, precedent_case_ids=[case.case_id])],
     ))
     draft2, _ = assess_sections(RAW, PROFILE, [_need(SectionId.fire)])
 
     model_name, tier, system, user = fake_llm.calls[-1]
     assert model_name == "SectionAssessment" and tier == "main"
-    assert "PB-001" in system, "playbook lesson must be in the system prompt"
-    assert "Case C-0001" in user, "precedent case must be in the user message"
-    assert draft2.findings[0].playbook_rule_ids == ["PB-001"]
+    assert f"Case {case.case_id}" in user, "precedent case must be in the user message"
+    assert "uncertified_gas_installation [high]" in user
+    assert "severity_changed uncertified_gas_installation medium→high" in user
+    assert '"Never medium without a certificate."' in user, "the why-note travels with the case"
+    assert "playbook" not in system.lower()
+    assert draft2.findings[0].precedent_case_ids == [case.case_id]
 
 
 def test_a_fire_lesson_is_structurally_unable_to_reach_a_motor_assessment(fake_llm):
-    memory.save_playbook(
-        memory.PLAYBOOK_STUB
-        + "\n## PB-001 · [fire] gas installations\nAbsence of a certificate is HIGH.\nSupporting cases: C-0001\n"
-    )
+    case = _approved_case(fake_llm)
+
+    # The case has draft findings under Motor (removed by the reviewer), so it
+    # is not even a candidate for a Motor-only assessment: retrieval is scoped
+    # to approved findings, and the Fire lesson stays out of the Motor prompt.
+    fake_llm.register(_RetrievalPick, _RetrievalPick(case_ids=[case.case_id]))
     fake_llm.register(SectionAssessment, SectionAssessment(findings=[]))
     assess_sections(RAW, PROFILE, [_need(SectionId.motor)])
-    _, _, system, _ = fake_llm.calls[-1]
-    assert "PB-001" not in system
+    _, _, system, user = fake_llm.calls[-1]
+    assert "Never medium without a certificate." not in user
+    assert "no comparable precedent findings" in user
+    assert not [c for c in fake_llm.calls if c[0] == "_RetrievalPick"], "no candidates, no picker call"
 
 
-def test_ingest_stores_a_provisional_case_and_never_touches_the_playbook(fake_llm):
-    playbook_before = memory.load_playbook()
+def test_ingest_stores_a_provisional_case(fake_llm):
     fake_llm.register(IngestedCase, IngestedCase(
         client_profile=PROFILE, summary=PROFILE.summary,
         approved_findings=[_finding(severity=Severity.high)],
@@ -146,7 +153,6 @@ def test_ingest_stores_a_provisional_case_and_never_touches_the_playbook(fake_ll
     assert case.provisional, "ingested cases must wait for human confirmation"
     assert case.final_band == "Elevated"
     assert memory.get_case(case.case_id) is not None
-    assert memory.load_playbook() == playbook_before, "SOLUTION_DESIGN §4.4: no ungated playbook write"
 
 
 def test_ingest_skips_chats_without_decisions(fake_llm):

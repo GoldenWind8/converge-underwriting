@@ -1,7 +1,7 @@
 {
   "buildings-combined": {
     "rate": 0.2,
-    "basis": "Building value \u2014 assumed at the Fire and Allied Perils rate; confirm with broker"
+    "basis": "Building value \u2014 assumed at the Fire and Allied Perils rate"
   },
   "fire": {
     "rate": 0.2,
@@ -21,11 +21,11 @@
   },
   "accounts-receivable": {
     "rate": 0.3,
-    "basis": "Debtors outstanding \u2014 placeholder; awaiting broker rate"
+    "basis": "Debtors outstanding"
   },
   "fidelity": {
     "rate": 0.5,
-    "basis": "Limit of indemnity \u2014 placeholder; broker rates on sum insured and employee count"
+    "basis": "Limit of indemnity \u2014 broker rates on sum insured and employee count"
   },
   "theft": {
     "rate": 9.0,
@@ -49,15 +49,18 @@
   },
   "group-personal-accident": {
     "rate": 0.8,
-    "basis": "Aggregate benefit \u2014 placeholder; awaiting broker rate"
+    "basis": "Aggregate benefit",
+    "placeholder": true
   },
   "motor": {
     "rate": 4.0,
-    "basis": "Fleet value \u2014 placeholder; broker rates vary by sum insured"
+    "basis": "Fleet value \u2014 broker rates vary by sum insured",
+    "placeholder": true
   },
   "motor-traders": {
     "rate": 3.0,
-    "basis": "Vehicles in custody \u2014 placeholder; awaiting broker rate"
+    "basis": "Vehicles in custody",
+    "placeholder": true
   },
   "public-liability": {
     "rate": 0.00833,
@@ -65,10 +68,11 @@
   },
   "broadform-liability": {
     "rate": 0.01,
-    "basis": "Limit of indemnity \u2014 placeholder; sheet rates Public and Employees Liability together"
+    "basis": "Limit of indemnity \u2014 sheet rates Public and Employees Liability together",
+    "placeholder": true
   },
   "umbrella-liability": {
     "rate": 0.005,
-    "basis": "Limit of indemnity \u2014 placeholder; awaiting broker rate"
+    "basis": "Limit of indemnity"
   }
 }

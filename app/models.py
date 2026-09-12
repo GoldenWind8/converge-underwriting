@@ -11,7 +11,7 @@ The flow's shapes, in pipeline order:
                                      about *shape*: verbatim evidence, a
                                      standardised severity.
 - RiskAssessmentDraft                what an assessment run produces, before
-                                     human review (gate 2).
+                                     the underwriter rates and prices it.
 - CaseRecord                         one approved case, the unit of memory.
                                      Only records a human signed off ever
                                      become non-provisional CaseRecords.
@@ -82,14 +82,13 @@ class RiskFinding(BaseModel):
     evidence_quote: str = Field(..., description="Verbatim text copied from the source document that evidences this risk.")
     reasoning: str = Field(..., description="Why this is a risk for this client.")
     precedent_case_ids: List[str] = Field(default_factory=list, description="IDs of retrieved past cases that informed this finding. Empty = novel.")
-    playbook_rule_ids: List[str] = Field(default_factory=list, description="IDs of playbook rules (PB-xxx) that informed this finding.")
     confidence: float = Field(0.5, description="0-1. Low confidence forces a human referral.")
 
 
 class SectionAssessment(BaseModel):
     """What one per-section model call returns."""
 
-    memory_note: str = Field("", description="One sentence on how playbook rules and precedents shaped this section's findings. If they did not, say so.")
+    memory_note: str = Field("", description="One sentence on how the precedent cases shaped this section's findings. If they did not, say so.")
     findings: List[RiskFinding] = Field(default_factory=list)
 
 
@@ -101,7 +100,6 @@ class RiskAssessmentDraft(BaseModel):
     # Runtime-only provenance: the exact context supplied to the assessment model.
     # These are deliberately excluded from the model schema and persisted record.
     _retrieved_case_ids: Optional[Set[str]] = PrivateAttr(default=None)
-    _available_rule_ids: Optional[Set[str]] = PrivateAttr(default=None)
 
 
 class SumInsured(BaseModel):
@@ -145,7 +143,8 @@ class CasePricing(BaseModel):
 
 
 class Correction(BaseModel):
-    """One human edit, draft -> approved. The raw material for reflection."""
+    """One human edit, draft -> approved. Travels with the case into the
+    precedent text the next assessment reads."""
 
     type: Literal["added", "removed", "severity_changed"]
     factor_name: str
@@ -164,10 +163,16 @@ class CaseRecord(BaseModel):
     approved_findings: List[RiskFinding] = Field(default_factory=list)
     corrections: List[Correction] = Field(default_factory=list)
     final_band: str = "Low"
-    # Deterministic premium calculation (pricing.py), added at approval and
-    # updated when the underwriter saves the Price gate. None on old and
-    # chat-ingested cases.
+    checked_by: str = ""  # the underwriter who approved at the Price gate
+    # Deterministic premium calculation (pricing.py), set at the Price gate and
+    # updated when pricing is adjusted afterwards. None on chat-ingested cases.
     pricing: Optional[CasePricing] = None
-    # Chat-ingested cases stay provisional — invisible to retrieval — until a
-    # human confirms them (docs/SOLUTION_DESIGN.md §4.4).
+    # Chat-ingested cases, and cases approved with "add to case memory"
+    # unticked, stay provisional — invisible to retrieval — until a human
+    # confirms them on /cases (docs/SOLUTION_DESIGN.md §4.4).
     provisional: bool = False
+    # Soft delete: the record is kept for history but leaves retrieval and the
+    # case listing. No restore.
+    deleted_at: Optional[str] = None
+    deleted_by: Optional[str] = None
+    deleted_reason: Optional[str] = None

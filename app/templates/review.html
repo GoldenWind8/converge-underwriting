@@ -21,8 +21,14 @@
   .needs-context td { padding:8px 14px; }
   .finding-stack { display:grid; gap:12px; }
   .section-block { margin-bottom:22px; }
-  .section-banner { display:flex; align-items:baseline; justify-content:space-between; gap:14px; margin:0 0 10px; padding:10px 14px; border:1px solid var(--line); border-left:3px solid var(--brand); border-radius:9px; background:#fff; }
+  .section-banner { display:flex; align-items:baseline; justify-content:space-between; gap:14px; margin:0 0 10px; padding:10px 14px; border:1px solid var(--line); border-left:3px solid var(--brand); border-radius:9px; background:#fff; cursor:pointer; list-style:none; }
+  .section-banner::-webkit-details-marker { display:none; }
   .section-banner h2 { margin:0; font-size:14px; }
+  .section-banner h2::before { content:"▾"; display:inline-block; width:16px; color:var(--muted); font-size:11px; }
+  .section-block:not([open]) .section-banner h2::before { content:"▸"; }
+  .section-block:not([open]) .section-banner { margin-bottom:0; }
+  .toggle-all { padding:0; border:0; background:none; box-shadow:none; color:var(--brand-dark); font-size:11px; font-weight:600; cursor:pointer; }
+  .toggle-all:hover { transform:none; box-shadow:none; background:none; text-decoration:underline; }
   .section-banner .why { color:var(--muted); font-size:11px; max-width:640px; }
   .finding-card { position:relative; overflow:hidden; border:1px solid var(--line); border-radius:12px; background:#fff; box-shadow:var(--shadow-sm); transition:.15s ease; }
   .finding-card:hover,.finding-card.active { border-color:#a9b5f9; box-shadow:0 7px 24px rgba(79,110,247,.09); }
@@ -57,15 +63,14 @@
 {% endblock %}
 {% block content %}
   <div class="review-top">
-    <div><div class="eyebrow">Human decision workspace · Gate 2</div><h1>{{ draft.client_profile.business_name or "Unnamed applicant" }}</h1><p class="sub" style="margin:0">{{ draft.client_profile.industry or "Industry not identified" }} · Drafted by {{ engine }} · {{ generated_at }}</p></div>
+    <div><div class="eyebrow">Findings &amp; evidence · drill-down from the Price gate</div><h1>{{ draft.client_profile.business_name or "Unnamed applicant" }}</h1><p class="sub" style="margin:0">{{ draft.client_profile.industry or "Industry not identified" }} · Drafted by {{ engine }} · {{ generated_at }}</p></div>
     <div class="page-actions">
-      <div class="stepper"><span class="step done"><span class="step-num">✓</span>Submit</span><span class="step done"><span class="step-num">✓</span>Needs</span><span class="step active"><span class="step-num">3</span>Review</span><span class="step"><span class="step-num">4</span>Price</span><span class="step"><span class="step-num">5</span>Learn</span></div>
+      <div class="stepper"><span class="step done"><span class="step-num">✓</span>Submit</span><span class="step done"><span class="step-num">✓</span>Needs</span><span class="step active"><span class="step-num">3</span>Price</span></div>
       <div class="band-summary"><div class="hint">Draft referral band<br><span style="font-size:10px">severity-derived · no score</span></div><span class="band {{ result.band }}" id="live-band">{{ result.band }}</span></div>
     </div>
   </div>
 
-  <form id="approval-form" action="/approve" method="post">
-    <input type="hidden" name="draft_id" value="{{ draft_id }}" />
+  <form id="review-form" action="/review/{{ draft_id }}" method="post">
     <div class="workspace">
       <section class="card source-panel">
         <div class="panel-head"><div><h2>Source application</h2><div class="hint">Select text to evidence a reviewer-added finding</div></div><span class="pill"><span class="status-dot"></span>Original</span></div>
@@ -80,15 +85,15 @@
           </tbody></table>
         </details>
 
-        <div class="section-head"><h2>Proposed risk findings</h2><span>{{ result.findings|length }} verified · click evidence to locate source</span></div>
+        <div class="section-head"><h2>Proposed risk findings</h2><span>{{ result.findings|length }} verified · click evidence to locate source · <button type="button" class="toggle-all" id="toggle-all">Collapse all</button></span></div>
         {% for group in groups %}
-        <div class="section-block">
-          <div class="section-banner"><h2>{{ group.cover.number }}. {{ group.cover.name }}</h2><span class="why">{{ group.need.reason if group.need else "" }}</span></div>
+        <details class="section-block" open>
+          <summary class="section-banner"><h2>{{ group.cover.number }}. {{ group.cover.name }}</h2><span class="why">{{ group["items"]|length }} finding(s) · {{ group.need.reason if group.need else "" }}</span></summary>
           <div class="finding-stack">
             {% for index, f in group["items"] %}
             <article class="finding-card" data-evidence="{{ f.evidence_quote }}">
               <div class="finding-head">
-                <div class="finding-title"><input class="keep" type="checkbox" name="keep_{{ index }}" checked aria-label="Keep {{ f.factor_name }}" /><div><h3 class="factor"><span class="mono">{{ f.factor_name }}</span></h3><span class="severity {{ f.severity.value }}">{{ f.severity.value }} severity</span>{% if f.assessment_note %}<div class="assessment-note">{{ f.assessment_note }}</div>{% endif %}</div></div>
+                <div class="finding-title"><input class="keep" type="checkbox" name="keep_{{ index }}" checked aria-label="Keep {{ f.factor_name|label }}" /><div><h3 class="factor">{{ f.factor_name|label }}</h3><span class="severity {{ f.severity.value }}">{{ f.severity.value }} severity</span>{% if f.assessment_note %}<div class="assessment-note">{{ f.assessment_note }}</div>{% endif %}</div></div>
                 <div class="finding-controls">
                   <label for="severity_{{ index }}">Severity</label>
                   <select class="severity-input" id="severity_{{ index }}" name="severity_{{ index }}">{% for s in severity_values %}<option value="{{ s }}" {% if f.severity.value == s %}selected{% endif %}>{{ s|title }}</option>{% endfor %}</select>
@@ -100,16 +105,15 @@
                 <div class="audit-row">
                   <span class="hint" style="margin-left:6px">Informed by</span>
                   {% for cid in f.precedent_case_ids %}<a class="audit-chip" href="/cases/{{ cid }}" target="_blank">↗ {{ cid }}</a>{% endfor %}
-                  {% for rid in f.playbook_rule_ids %}<a class="audit-chip" href="/playbook#{{ rid }}" target="_blank">§ {{ rid }}</a>{% endfor %}
-                  {% if not f.precedent_case_ids and not f.playbook_rule_ids %}<span class="pill">Novel finding</span>{% endif %}
+                  {% if not f.precedent_case_ids %}<span class="pill">Novel finding</span>{% endif %}
                   <span class="confidence">Model confidence {{ (f.confidence * 100)|round|int }}%</span>
                 </div>
-                <div class="why-note"><input type="text" name="note_{{ index }}" placeholder="Why? Optional — your note is remembered verbatim and teaches the playbook." /></div>
+                <div class="why-note"><input type="text" name="note_{{ index }}" placeholder="Why? Optional — your note is remembered verbatim with the case and shown to the next assessment." /></div>
               </div>
             </article>
             {% endfor %}
           </div>
-        </div>
+        </details>
         {% else %}<div class="card empty">No evidence-backed findings were proposed. Add one below if the source supports it.</div>{% endfor %}
 
         <div class="section-head"><h2>Add a missed finding</h2><span>Reviewer-authored · evidence required</span></div>
@@ -132,16 +136,15 @@
         <div class="section-head"><h2>Decision referrals</h2><span>Explicit human attention required</span></div>
         <div class="referral-list">
           {% for r in result.referrals %}<div class="referral"><span>◆</span><span>{{ r }}</span></div>{% endfor %}
-          {% for f, reason in result.dropped %}<div class="referral"><span>×</span><span><span class="mono">{{ f.factor_name }}</span> was removed: {{ reason }}.</span></div>{% endfor %}
+          {% for f, reason in result.dropped %}<div class="referral"><span>×</span><span><strong>{{ f.factor_name|label }}</strong> was removed: {{ reason }}.</span></div>{% endfor %}
         </div>
         {% endif %}
 
-        <div class="approve-bar"><div><strong>Ready for an underwriting decision</strong><span>Approval stores this case. Any playbook change will still require your explicit acceptance.</span></div><button type="submit">Approve assessment <span>→</span></button></div>
+        <div class="approve-bar"><div><strong>Back to the Price gate</strong><span>Your edits go into the draft and are re-priced there. Nothing is stored until you approve on the price page.</span></div><div class="page-actions"><a class="btn secondary" href="/drafts/{{ draft_id }}/price">Discard changes</a><button type="submit">Save &amp; go back <span>→</span></button></div></div>
         {% if usage and usage.calls %}<div class="usage-line">{{ usage.calls }} model call(s){% if usage.input_tokens or usage.output_tokens %} · {{ usage.input_tokens + usage.output_tokens }} tokens{% endif %}{% if usage.cost_usd %} · ${{ "%.2f"|format(usage.cost_usd) }}{% endif %} this run</div>{% endif %}
       </section>
     </div>
   </form>
-  <div class="loading-overlay" id="approval-loading"><div class="loading-card"><div class="eyebrow" style="color:#9aa8ff">Securing decision</div><h2 style="color:#fff;font-size:22px">Recording the approved case</h2><div class="loading-line"></div><p style="color:#a9acb9;margin:0">Preparing a governed learning proposal…</p></div></div>
 {% endblock %}
 {% block scripts %}
 <script>
@@ -167,6 +170,7 @@
   document.querySelectorAll('.finding-card').forEach(card=>card.addEventListener('click',event=>{if(event.target.closest('input,select,a'))return;document.querySelectorAll('.finding-card').forEach(c=>c.classList.remove('active'));card.classList.add('active');highlight(card.dataset.evidence);}));
   let selectedEvidence='';source.addEventListener('mouseup',()=>{const selection=window.getSelection();if(selection&&source.contains(selection.anchorNode))selectedEvidence=selection.toString().trim();});
   document.getElementById('use-selection').addEventListener('click',()=>{document.getElementById('new-evidence').value=selectedEvidence;document.getElementById('new-evidence').focus();});
-  document.getElementById('approval-form').addEventListener('submit',()=>document.getElementById('approval-loading').classList.add('active'));
+  const toggleAll=document.getElementById('toggle-all'),blocks=[...document.querySelectorAll('details.section-block')];
+  if(toggleAll)toggleAll.addEventListener('click',()=>{const open=blocks.some(d=>d.open);blocks.forEach(d=>d.open=!open);toggleAll.textContent=open?'Expand all':'Collapse all';});
 </script>
 {% endblock %}

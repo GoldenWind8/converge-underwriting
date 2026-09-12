@@ -18,8 +18,8 @@ missing provider fails immediately with a clear message, not halfway through a
 request.
 
 Model names can be overridden with LLM_MODEL_MAIN / LLM_MODEL_FAST.
-"main" is used for needs determination, assessment + reflection
-(quality-critical); "fast" for profile extraction and case retrieval.
+"main" is used for needs determination and assessment (quality-critical);
+"fast" for profile extraction and case retrieval.
 
 Every call appends a UsageRecord to usage_log (tokens always when the provider
 reports them; cost when it reports that too) — iteration you cannot measure is

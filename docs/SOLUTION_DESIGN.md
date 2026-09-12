@@ -1,12 +1,15 @@
 # Solution Design — Converge Underwriting
 
-**Status:** Implemented — v1.4, 2026-08-27. [ARCHITECTURE.md](ARCHITECTURE.md) is the
+**Status:** Implemented — v1.5, 2026-09-12. [ARCHITECTURE.md](ARCHITECTURE.md) is the
 as-built map; the [README](../README.md) covers running, configuring and testing.
 **History:** the original fixed-schema + deterministic-rules pipeline was removed
 entirely (client decision, 2026-07-09): an LLM is required and the app fails fast at
 startup without one. What survives of that philosophy is `guardrails.py` (§4.3).
 The needs-determination gate, per-section assessment and the removal of every numeric
-score followed on 2026-08-26; the client-facing PDF export on 2026-08-27.
+score followed on 2026-08-26; the client-facing PDF export on 2026-08-27. On 2026-09-12
+(client meeting of 2026-09-01) the playbook and its reflection gate were removed: case
+memory — with the reviewer's corrections carried inside each precedent — is the only
+learning layer, and the Price gate became the approval gate.
 **Deferred as designed:** embeddings (§5) — retrieval is LLM-as-picker behind one
 `retrieve()` function (§6.1).
 
@@ -42,23 +45,25 @@ as **what we retrieve into the prompt**:
 
 | Memory layer | Analogy | Contents | Injected |
 |---|---|---|---|
-| **Case memory** | episodic memory | One record per past case: client profile, confirmed needs, draft and approved findings, corrections with the reviewer's why-notes | Top-k comparable cases, filtered to the section being assessed |
-| **Playbook** | semantic memory / learned rules | Compact natural-language lessons distilled from reviewer corrections (`playbook.md`, versioned) | The rules tagged for the section being assessed, plus general ones |
+| **Case memory** | episodic memory | One record per past case: client profile, confirmed needs, draft and approved findings, corrections with the reviewer's why-notes, who checked it, its pricing | Top-k comparable cases among those with findings in the sections being assessed; each section's prompt sees that section's findings plus the reviewer's changes to them |
 | **Guardrails** | procedure | Deterministic validation: evidence check, citation allow-list, band mapping, referral triggers | Code, not prompt |
 
 The loop itself is drawn in the README and, file by file, in ARCHITECTURE.md.
 Two properties matter for the pitch to insurers:
 
-- **Auditable.** Every finding cites its verbatim evidence, the precedent cases,
-  and/or the playbook rule that influenced it. The playbook is a human-readable
-  markdown file an underwriter can open, audit, and edit.
+- **Auditable.** Every finding cites its verbatim evidence and the precedent
+  cases that influenced it; every precedent carries the reviewer's own
+  corrections, so a lesson is always one hop from the decision that taught it.
 - **Immediate.** A reviewer correction takes effect on the very next
   assessment — demoable live, unlike fine-tuning.
 
 **Governance rule: only human-approved material enters memory.** Unreviewed
-LLM drafts never feed their own retrieval, and the playbook only changes when
-an underwriter accepts a proposed edit, so errors can't compound. Human
-sign-off *is* the learning signal.
+LLM drafts never feed their own retrieval: a case enters memory only when the
+underwriter signs it off at the Price gate with "add to case memory" ticked,
+so errors can't compound. Human sign-off *is* the learning signal. There is no
+separate rule layer to drift: a lesson lives and dies with the case that
+taught it, and a case can be deleted (with a name and a reason) when it
+should no longer teach.
 
 ## 3. Data model
 
@@ -81,35 +86,39 @@ The LLM stays on rails about *shape*, not *content*: a snake_case
 `severity` on the standardised low / medium / high / severe scale, a narrative
 `assessment_note` naming the reference class ("below standard for a
 food-production occupancy"), a **verbatim** `evidence_quote`, reasoning, the
-`precedent_case_ids` / `playbook_rule_ids` it drew on (both empty = novel), and
-a 0–1 `confidence`. There is deliberately no points field — see §6.3.
+`precedent_case_ids` it drew on (empty = novel), and a 0–1 `confidence`.
+There is deliberately no points field — see §6.3.
 
 ### 3.3 CaseRecord (the unit of memory)
 
 `case_id`, `created_at`, `source` (`assessment` | `chat_ingestion`), the slim
 `client_profile`, a retrieval `summary`, the confirmed `needs`, `draft_findings`
 vs `approved_findings`, the `corrections` diff between them (each carrying the
-reviewer's own why-note verbatim), the derived `final_band`, and a
-`provisional` flag that keeps chat-ingested cases out of retrieval until a
-human confirms them (§4.4). Stored as one JSON row in SQLite.
+reviewer's own why-note verbatim), the derived `final_band`, `checked_by`
+(the underwriter who approved at the Price gate), the `pricing` table, a
+`provisional` flag that keeps a case out of retrieval until a human confirms
+it (chat-ingested cases, and cases approved with "add to case memory"
+unticked — §4.4), and the soft-delete trio `deleted_at` / `deleted_by` /
+`deleted_reason`. Stored as one JSON row in SQLite.
 
-### 3.4 Playbook
+### 3.4 Corrections are the lesson
 
-`data/playbook.md`, copied to `data/playbook_history/` on every save. Each
-rule is a markdown block:
+There is no distilled rule layer. When a precedent case is rendered into a
+section's prompt, its approved findings for that section are followed by the
+reviewer's changes to that section, verbatim:
 
-```markdown
-## PB-014 · [fire] Food service — gas installations
-Absence of a gas installation certificate of conformity has been rated HIGH in
-every reviewed food-service case. Treat as HIGH by default; cite the certificate
-requirement in the finding.
-Supporting cases: C-0032, C-0041, C-0057, C-0061
+```
+Case C-0032 — Restaurant with a gas kitchen; covers: Fire
+  Outcome: Elevated band
+  - uncertified_gas_installation [high] No certificate of conformity since the refit.
+  Reviewer changes: severity_changed uncertified_gas_installation medium→high
+  ("Gas plus no certificate is never medium.")
 ```
 
-Rule IDs are stable so findings can cite them; the `[section-id]` tag routes
-the rule to the right per-section prompt (`[general]` or untagged rules reach
-every section); supporting-case links let an underwriter audit any rule back
-to its evidence.
+A Fire lesson reaches only Fire prompts, because corrections are scoped to the
+section of the finding they changed, and a case is only a retrieval candidate
+for the sections it has findings in. Removing a lesson means deleting (or
+re-approving) the case that carries it — nothing to retag, renumber or retire.
 
 ## 4. Components
 
@@ -123,28 +132,30 @@ underwriter confirmed as required**, run concurrently, each assembled as:
 [system]   role + section number, name and scope from the needs analysis
            + why this section is in scope (+ Motor sub-type, if Motor)
            + output rules + the no-pricing boundary
-           + THE PLAYBOOK, filtered to this section
-[user]     precedent findings under this section (from the top-k cases)
+[user]     precedent findings under this section (from the top-k cases),
+           each followed by the reviewer's changes and why-notes (§3.4)
            + the raw application document
 ```
 
 Findings come back tagged with the section and are reassembled in
 needs-analysis order. One failed section fails the whole assessment — no
-partial drafts. Prompt caching is not used yet; if it is, the section-filtered
-playbook is the natural cacheable prefix since it changes only on reflection.
+partial drafts. Prompt caching is not used yet; if it is, the system prompt
+(fixed per section) is the natural cacheable prefix.
 
-### 4.2 `memory.py` — storage, retrieval, reflection
+### 4.2 `memory.py` — storage, retrieval, deletion
 
 - **Store:** SQLite, single `cases` table with the record as a JSON column
   (rationale in §6.2).
-- **Retrieve:** a "fast" model reads one-line summaries of every active
-  (non-provisional) case and picks the k most comparable (default k=5).
-  Retrieval failure returns no precedents rather than failing the assessment.
-- **Reflect:** after each human sign-off, one "main" call receives the
-  approved case with its corrections and the current playbook and returns an
-  edited playbook (add rule / strengthen / weaken / retire, section-tagged).
-  It is only a **proposal**: the underwriter sees the diff, can edit it, and
-  must accept it before it is saved (§6.5).
+- **Retrieve:** called after gate 1 with the confirmed sections. Candidates
+  are the active (non-provisional, non-deleted) cases with at least one
+  approved finding in any of those sections; a "fast" model reads their
+  one-line summaries, is told which sections are being assessed, and picks
+  the k most comparable (default k=5). Retrieval failure returns no
+  precedents rather than failing the assessment.
+- **Delete:** soft. The row keeps `deleted_at` / `deleted_by` /
+  `deleted_reason`, leaves retrieval and the case list, and appears in the
+  Deleted log on `/cases`. Case IDs count deleted rows, so an ID is never
+  reused. Restore is deliberately absent (open per client).
 
 ### 4.3 `guardrails.py` — the deterministic layer
 
@@ -153,8 +164,8 @@ The old rules-engine philosophy survives here, re-scoped to verification:
 - drop findings whose `evidence_quote` does not appear (normalised) in the
   source document — kills hallucinated evidence — and findings whose quote is
   too short or made of stopwords ("Yes") to evidence anything;
-- strip precedent / rule citations the model was not actually given, and note
-  that it happened;
+- strip precedent citations the model was not actually given, and note that
+  it happened;
 - derive the referral band from the severity profile: High for any severe or
   3+ high, Elevated for any high or 3+ medium, Moderate for any medium, Low
   otherwise;
@@ -163,8 +174,8 @@ The old rules-engine philosophy survives here, re-scoped to verification:
   dropped.
 
 An underwriter can reproduce the band by hand; what changed from the legacy
-design is that the findings list comes from precedent + playbook rather than
-fixed rules, and there is no arithmetic at all.
+design is that the findings list comes from precedent rather than fixed
+rules, and there is no arithmetic at all.
 
 ### 4.4 `ingest_chats.py` — bootstrapping from historical chats
 
@@ -172,37 +183,47 @@ One-off batch over exported chat transcripts, one "fast" call each: extract
 the client profile and the risks the human underwriter actually decided on;
 skip transcripts with no risk decision. Each result is stored as a
 **provisional** `CaseRecord` (`source="chat_ingestion"`): invisible to
-retrieval until a human confirms it on `/cases`, and ingestion never writes to
-the playbook. That keeps the "only approved data enters memory" rule honest
-even for machine-extracted history.
+retrieval until a human confirms it on `/cases`. The same flag serves a case
+the underwriter approves with "add to case memory" unticked. That keeps the
+"only approved data enters memory" rule honest even for machine-extracted
+history.
 
-### 4.5 The four gates in the UI
+### 4.5 The two gates in the UI
 
 FastAPI + Jinja, single implicit reviewer, no auth:
 
 1. **Needs table** — the underwriter can re-bucket any section (required /
    not-applicable), pick the Motor sub-type, and confirm or correct the
    pre-filled sum insured per required section; at least one section must be
-   required. Sums are pre-filled by a fast extraction call (`sums.py`) that
-   only transcribes figures the submission states — the confirmed number is
-   the only one ever priced.
-2. **Review** — split-screen draft with the source document: change a
-   severity, remove a finding, add one (subject to the same evidence check),
-   and say why on each edit. Approve stores the case and triggers reflection.
-3. **Price** — the deterministic premium table (`pricing.py`): per required
-   section, sum insured x base rate gives the base premium, and the section's
-   band (guardrails.band_for_section over that section's approved findings)
-   picks the loading from the band table. The underwriter can override a
-   loading; the override is disclosed against the table value, on screen and
-   on the PDF. Sections without a confirmed sum insured show "not priced" —
-   the engine never invents a number.
-4. **Learning** — the proposed playbook, editable, with accept / skip. The
-   approved case is a precedent either way.
+   required, and **every required section must have a sum insured** — the
+   form is sent back otherwise, so every line downstream is priced. Sums are
+   pre-filled by a fast extraction call (`sums.py`) that only transcribes
+   figures the submission states — the confirmed number is the only one ever
+   priced.
+2. **Price** — the approval gate. Per required section: the premium row
+   (`pricing.py`: sum insured x base rate, loading picked from the band table
+   by the section's band — guardrails.band_for_section over that section's
+   findings) and, under it, the findings as **identifier · rating ·
+   description**. Changing a rating re-bands the section and re-picks its
+   loading in the browser (the band rule and the loading table are mirrored
+   client-side) — live totals, no model call; a loading the underwriter typed
+   survives a band change, a table loading follows it. **Checked by** is
+   required; **Add to case memory** (default on) decides whether the case is
+   a precedent or stays provisional. Approve recomputes everything
+   server-side, records rating edits as `severity_changed` corrections, stores
+   the case and shows the report.
 
-The decision page then offers a client-facing PDF (`pdf.py`, xhtml2pdf) that
-omits internal codes — factor slugs, rule and precedent ids, confidence,
-reviewer edits — and includes the premium calculation with any overrides
-disclosed.
+   *Review findings & evidence* is a drill-down from the Price gate: the
+   split-screen page with the source document, where a finding can be removed
+   or added (subject to the same evidence check) with a why-note on each
+   edit. *Save & go back* writes the edits into the draft; nothing is stored
+   until the Price gate's approve.
+
+The decision page shows **Checked by** and offers a client-facing PDF
+(`pdf.py`, xhtml2pdf) that omits internal codes — factor slugs, precedent ids,
+confidence, reviewer edits — and includes the premium calculation with any
+overrides disclosed. Pricing of a stored case can be adjusted afterwards
+(loadings only; ratings are fixed once approved).
 
 ### 4.6 `pricing.py` — the deterministic pricing engine
 
@@ -333,16 +354,20 @@ engine does not weaken this: premiums are computed *after* approval by plain
 Python (§4.6) from broker-confirmed inputs — the LLM still never emits a
 number.
 
-### 6.4 ⚖️ Reflection cadence — synchronous per sign-off vs batched
-Per sign-off is what is built: it makes the demo interactive — correct one
-case, assess a similar one, watch the lesson appear. Batched (nightly) is
-cheaper and produces a calmer playbook at production volume; it would be a
-small change since reflection is already one function over one case.
+### 6.4 ⚖️ One learning layer, not two (2026-09-12)
+Until v1.4 corrections were also distilled by an LLM into a section-tagged
+playbook that the underwriter accepted at a fourth gate. The client retired
+it: the extra gate slowed the flow, and a rule distilled from two cases read
+as policy. Corrections now travel verbatim inside the precedent text (§3.4),
+which keeps the "correct one case, assess a similar one, see the lesson"
+demo intact with one fewer model call and no rule file to govern.
 
-### 6.5 ⚖️ Playbook write access — LLM-drafted, human-owned
-Implemented: the LLM drafts an editable playbook update after case approval, but
-the update only becomes active when the underwriter explicitly accepts it. The
-underwriter can edit or skip the proposal, and the previous version is archived.
+### 6.5 ⚖️ Price is the approval gate (2026-09-12)
+Underwriters wanted to rate and price in one place, so the findings table
+(identifier · rating · description) sits under each premium row and the
+review page became a drill-down for evidence and add/remove. Ratings are
+therefore approved by the same click as the loadings, under a named
+"checked by".
 
 ### 6.6 ⚖️ Precedent scope — global memory vs per-insurer partitions
 If this is pitched to multiple insurers, does insurer A's correction history
@@ -350,33 +375,32 @@ teach the system serving insurer B? Cross-tenant learning is a data-governance
 question the client must answer before production. POC: single shared memory.
 
 ### 6.7 ✅ Cold start / novel risks
-A finding citing no precedent and no playbook rule is allowed but auto-flagged
-`NOVEL` and referred. Early on most findings are novel; as memory fills,
+A finding citing no precedent is allowed but auto-flagged `NOVEL` and referred. Early on most findings are novel; as memory fills,
 referral rate drops — which is itself a nice "the system is learning" metric
 to chart in the demo.
 
 ### 6.8 ✅ Memory hygiene
-Reflection can retire rules (contradicted by newer decisions), and rules carry
-supporting-case links so stale ones are traceable. The playbook is capped at
-~2500 tokens; when exceeded, reflection must consolidate before adding.
+A case that should no longer teach is deleted with a name and a reason (soft
+delete: it leaves retrieval and the listing, stays readable, and is logged on
+`/cases`). Because a lesson lives inside its case, that is the whole
+retirement mechanism. Restore is deliberately absent until a client asks.
 
 ### 6.9 ⚖️ Evaluation — how do we prove it's learning?
 `python -m app.evaluate`: for every stored case, rebuild a pseudo-application
 from its evidence and assess it leave-one-out with memory off vs on, counting
 approved findings recovered (and severities matched). One number
 ("precedent-informed assessments matched historical underwriter decisions X%
-vs Y% blind") carries the pitch. Caveat: playbook rules the held-out case
-contributed remain in force.
+vs Y% blind") carries the pitch.
 
 ### 6.10 ✅ Models
-Two tiers, not two vendors: "main" for needs determination, assessment and
-reflection (quality-critical); "fast" for profile extraction, retrieval and
-chat ingestion. The provider and the per-tier model names are environment
+Two tiers, not two vendors: "main" for needs determination and assessment
+(quality-critical); "fast" for profile extraction, retrieval and chat
+ingestion. The provider and the per-tier model names are environment
 configuration — see the README.
 
 ### 6.11 ✅ Per-section assessment, not one whole-submission call
 One call per required section keeps each prompt focused (its own scope, its
-own rules, its own precedents), lets the calls run concurrently, and makes the
+own precedents), lets the calls run concurrently, and makes the
 needs table the single control over what gets assessed. The cost is more
 calls per submission and the loss of cross-section reasoning, which the
 prompt explicitly tells the model to leave to the other sections.
@@ -389,27 +413,30 @@ prompt explicitly tells the model to leave to the other sections.
 | 2 | `guardrails.py` (evidence check, band, referrals) + report shows findings w/ evidence | done |
 | 3 | `memory.py` store + LLM-as-retriever; assess cites precedents | done |
 | 4 | Review UI (edit + approve) + case persistence on approval | done |
-| 5 | Reflection step, gated by the underwriter | done |
+| 5 | Reflection step, gated by the underwriter | done; retired 2026-09-12 (§6.4) |
 | 6 | `ingest_chats.py` + synthetic historical-chat dataset, provisional until confirmed | done |
 | 7 | Eval harness + demo script ("correct → re-assess → watch it learn") | done |
 | 7b | Needs determination gate, 18-section catalogue, per-section assessment, no score | done (2026-08-26) |
 | 7c | Client-facing PDF export | done (2026-08-27) |
+| 7d | Deterministic pricing engine + Price gate | done (2026-08-31) |
+| 7e | Playbook removed; Price gate is the approval gate; section-scoped retrieval; soft delete | done (2026-09-12) |
 | 8 | (optional) swap retriever to `voyage-4-lite` embeddings | open |
 
 ## 8. Risks
 
-- **Playbook drift / overgeneralization** — a lesson learned from 2 cases
-  stated as a universal rule. Mitigated by supporting-case links, the
-  section tag, and the human-visible diff every change goes through (§6.5,
-  §6.8).
+- **Precedent overreach** — one reviewer's correction read as a universal
+  rule. Mitigated by scoping: a case is only retrieved for sections it has
+  findings in, each prompt sees only that section's findings and changes, and
+  the picker reasons about comparability rather than keyword overlap. A case
+  that misleads can be deleted (§6.8).
 - **Sparse chat data** — if historical transcripts are few or low-signal,
   seed the demo with synthetic-but-realistic transcripts and say so (the
   bundled `sample_data/chats/` are synthetic).
 - **Reviewer fatigue** — the learning loop is only as good as the corrections;
   approve-with-no-edits is one click so the happy path is cheap.
 - **Insurer skepticism of LLM-proposed factors** — the counter is the audit
-  chain (evidence quote → precedent → playbook rule → human sign-off), which
-  the review page puts front-and-center.
+  chain (evidence quote → precedent → reviewer correction → human sign-off),
+  which the review drill-down puts front-and-center.
 - **Over-inclusive needs tables** — a model that marks everything required
   puts the client on cover they cannot claim under. The needs prompt pushes
   back on this explicitly, and gate 1 exists so the underwriter has the last

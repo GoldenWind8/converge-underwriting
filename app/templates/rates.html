@@ -13,22 +13,24 @@
   <div class="eyebrow">Pricing configuration</div>
   <h1>Base rates &amp; loadings</h1>
   <p class="sub">The deterministic inputs behind every premium: a flat annual rate per cover section (as a percentage of the sum insured), and one loading per risk band applied on top. The assessment model never sees these numbers.</p>
-  {% if saved %}<div class="notice" style="margin-bottom:16px">Saved. New assessments price with these values; stored cases keep the pricing they were approved with.</div>{% endif %}
+  <p class="hint" style="margin:-12px 0 18px">Rows in <strong>bold</strong> are placeholders still to be confirmed with the broker — tick <em>Confirmed</em> once they are.</p>
 
   <form action="/rates" method="post">
+    <input type="hidden" name="next" value="{{ back }}" />
     <div class="rates-grid">
       <div class="card">
         <div class="panel-head"><h2>Base rates</h2><span class="pill">Annual % of sum insured</span></div>
         <div style="overflow-x:auto">
         <table>
-          <thead><tr><th>#</th><th>Section</th><th style="text-align:right">Rate %</th><th>Applies to</th></tr></thead>
+          <thead><tr><th>#</th><th>Section</th><th style="text-align:right">Rate %</th><th>Applies to</th><th>Confirmed</th></tr></thead>
           <tbody>
             {% for cover in cover_sections %}{% set entry = rates[cover.id.value] %}
-            <tr>
+            <tr class="{% if entry.placeholder %}needs-confirm{% endif %}">
               <td class="muted">{{ cover.number }}</td>
-              <td class="rate-name">{{ cover.name }}</td>
+              <td class="rate-name">{{ cover.name }}{% if entry.placeholder %} <span class="pill confirm" title="Placeholder rate — confirm with the broker">confirm</span>{% endif %}</td>
               <td style="text-align:right"><input type="number" step="any" min="0" name="rate_{{ cover.id.value }}" value="{{ "%g"|format(entry.rate) }}" aria-label="Rate for {{ cover.name }}" /></td>
-              <td class="muted" style="font-size:12px">{{ entry.basis }}</td>
+              <td class="{% if not entry.placeholder %}muted{% endif %}" style="font-size:12px">{{ entry.basis }}</td>
+              <td>{% if entry.placeholder %}<input type="checkbox" name="confirmed_{{ cover.id.value }}" value="1" aria-label="Confirmed with broker: {{ cover.name }}" />{% else %}<span class="status-icon ok" title="Rate from the broker's sheet">✓</span>{% endif %}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -52,6 +54,12 @@
         <div class="cfg-foot"><span class="hint">Negative values discount the base premium.</span></div>
       </div>
     </div>
-    <div style="display:flex;justify-content:flex-end;margin-top:16px"><button type="submit">Save rates &amp; loadings</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:16px">
+      <span class="status-line">{% if saved %}<span class="status-icon ok" title="Saved. New assessments price with these values; stored cases keep the pricing they were approved with.">✓</span> Saved{% endif %}</span>
+      <div class="page-actions">
+        {% if back %}<button type="submit" name="action" value="back" class="secondary">Save &amp; go back</button>{% endif %}
+        <button type="submit" name="action" value="save">Save rates &amp; loadings</button>
+      </div>
+    </div>
   </form>
 {% endblock %}
