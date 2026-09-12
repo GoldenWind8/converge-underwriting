@@ -92,8 +92,8 @@ def test_full_flow_through_all_gates(fake_llm):
     })
     assert response.status_code == 200
     assert "Decision recorded" in response.text
-    assert "Checked by Cameron" in response.text
-    assert "band table: +25%" in response.text, "a manual override is disclosed, not silent"
+    assert "Prepared by Cameron" in response.text
+    assert "+30%" in response.text and "band table" not in response.text, "the quote shows the applied loading only"
 
     case = memory.get_case("C-0001")
     assert case is not None

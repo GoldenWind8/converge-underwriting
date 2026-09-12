@@ -6,7 +6,8 @@ Rendering: templates in, HTML out. No logic beyond display grouping.
 - pricing.html   the Price gate (human gate 2): ratings + premiums, and the
                  post-approval "adjust pricing" view of a stored case
 - review.html    findings with evidence — drill-down from the Price gate
-- report.html    final report for an approved case
+- report.html    the insurer document for an approved case: Part 1 the quotation,
+                 Part 2 the risk assessment behind it (case_pdf.html mirrors it)
 - cases.html     case-memory listing (+ the deleted history log)
 """
 
@@ -19,7 +20,7 @@ from typing import Dict, List, Optional
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from .guardrails import GuardrailResult
+from .guardrails import GuardrailResult, band_for_section
 from .models import (CasePricing, CaseRecord, ClientProfile,
                      NeedsDetermination, RiskAssessmentDraft, RiskFinding,
                      SectionNeed)
@@ -118,10 +119,26 @@ def render_review(draft_id: str, draft: RiskAssessmentDraft, result: GuardrailRe
     )
 
 
+def document_context(case: CaseRecord) -> dict:
+    """What report.html and case_pdf.html both need: the priced lines (Part 1),
+    the findings grouped by section with each section's band (Part 2)."""
+    priced = [l for l in case.pricing.lines if l.base_premium is not None] if case.pricing else []
+    bands = {line.section: line.band for line in priced}
+    groups = _section_groups(case.approved_findings, case.needs)
+    for group in groups:
+        group["band"] = bands.get(group["cover"].id) or band_for_section([f for _, f in group["items"]])
+    return {
+        "case": case,
+        "priced": priced,
+        "groups": groups,
+        "sub_types": {n.section: n.motor_sub_type.value.replace("-", " ").capitalize()
+                      for n in case.needs if n.motor_sub_type},
+    }
+
+
 def render_report(case: CaseRecord, engine: str, generated_at: str) -> str:
     return _env.get_template("report.html").render(
-        case=case, engine=engine, generated_at=generated_at,
-        groups=_section_groups(case.approved_findings, case.needs),
+        engine=engine, generated_at=generated_at, **document_context(case),
     )
 
 

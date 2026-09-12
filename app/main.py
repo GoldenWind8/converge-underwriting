@@ -18,7 +18,7 @@ The loop (two human gates, one drill-down):
                               remove findings, save and go back
   GET/POST /cases/{id}/pricing  adjust the pricing of a stored case
   GET  /cases                 browse memory;  GET /cases/{id} re-renders a report
-  GET  /cases/{id}/pdf        client-facing PDF copy of a stored case
+  GET  /cases/{id}/pdf        insurer-facing PDF (quotation + risk assessment) of a stored case
   POST /cases/{id}/delete     soft delete with who + why
   GET/POST /rates             base rates + band loadings config (config/*.json)
 

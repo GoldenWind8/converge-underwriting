@@ -96,10 +96,11 @@ approve. Assess a similar client and watch the next finding cite the precedent c
 with your correction quoted in the prompt.
 
 Once a case is approved, **Save PDF copy** on the decision page (or `GET /cases/{id}/pdf`)
-downloads a client-facing report: `app/templates/case_pdf.html` rendered and converted with
-xhtml2pdf (pure Python, no browser needed). Internal codes — factor slugs, precedent
-ids, confidence, reviewer edits — are left out of it; "Checked by" is on it.
-`sample_data/Converge-Underwriting-C-0002-XYZ-Shoes.pdf` is an example of the output.
+downloads the insurer-facing document: `app/templates/case_pdf.html` rendered and converted
+with xhtml2pdf (pure Python, no browser needed). Part 1 is the quotation (summary, itemised
+sections, terms, "Prepared by"); Part 2 the risk assessment behind it — findings per section
+as title, severity and reasoning. Internal material — factor slugs, precedent ids, confidence,
+evidence quotes, reviewer edits, loading overrides — is left out.
 
 **Reset** on the case-memory page (`POST /demo/reset`) empties case memory, deleted
 history included.
@@ -142,7 +143,7 @@ app/
   pricing.py       deterministic pricing engine (sum insured × rate × band loading) — no LLM
   memory.py        SQLite case store, section-scoped retrieval, soft delete
   main.py          FastAPI routes;  report.py + templates/  HTML rendering
-  pdf.py           client-facing PDF of an approved case (templates/case_pdf.html + xhtml2pdf)
+  pdf.py           insurer-facing PDF of an approved case (templates/case_pdf.html + xhtml2pdf)
   ingest_chats.py  seed memory (provisional) from historical chats;  evaluate.py  eval harness
 config/            rates.json (base rate per section) + loadings.json (band → loading %) —
                    git-tracked, editable on /rates, placeholders until the broker's rate sheet

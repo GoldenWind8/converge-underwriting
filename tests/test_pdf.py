@@ -27,21 +27,22 @@ CASE = CaseRecord(
 )
 
 
-def test_pdf_html_is_client_facing():
+def test_pdf_html_is_insurer_facing():
     html = render_case_pdf_html(CASE, "2026-08-27 19:00")
 
-    assert "XYZ Shoes" in html and "Elevated risk" in html
+    assert "XYZ Shoes" in html and "Risk assessment" in html
     assert "Uncertified electrical installation" in html, "factor titles are humanised"
     assert "uncertified_electrical_installation" not in html, "no internal slugs"
     assert "C-0001" not in html, "no precedent codes"
-    assert "Checked by Sashin" in html
-    assert "2. Fire" in html
-    assert "Not applicable" not in html, "not-applicable sections stay off the client PDF"
-    assert "Glass" not in html
-    assert "Electrical CoC current, and dated: No" in html
+    assert "Prepared by Sashin" in html
+    assert "Fire" in html and "2. Fire" not in html, "section numbers are internal"
+    assert "Glass" not in html, "not-applicable sections stay off the PDF"
+    assert "Electrical CoC current, and dated: No" not in html, "evidence quotes are internal"
+    assert "Below standard for a manufacturing occupancy" not in html, "one statement per finding"
+    assert "No premium quoted" in html, "an unpriced case still says so on page one"
 
 
-def test_pdf_shows_the_premium_table_and_discloses_overrides():
+def test_pdf_leads_with_the_quote():
     from app.models import CasePricing, PricedSection
 
     priced = CASE.model_copy(update={"pricing": CasePricing(
@@ -59,11 +60,13 @@ def test_pdf_shows_the_premium_table_and_discloses_overrides():
     # Amounts are rendered with non-breaking spaces so they never wrap in the PDF.
     html = render_case_pdf_html(priced, "2026-08-27 19:00").replace("&nbsp;", " ")
 
-    assert "Premium calculation" in html
-    assert "R 72 000" in html and "R 82 800" in html
-    assert "band table: +10%" in html, "a manual override is disclosed against the table value"
-    assert "Fidelity" not in html and "Not priced" not in html, "unpriced lines stay off the client PDF"
-    assert "not a binding quotation" in html
+    assert html.index("Quote summary") < html.index("Itemised quote") < html.index("Risk assessment")
+    assert "R 82 800" in html and "R 18 000 000" in html
+    assert "R 72 000" not in html, "the base premium is internal"
+    assert "band table" not in html, "the applied loading is the quoted loading; overrides are internal"
+    assert "+15%" in html and "Elevated" in html
+    assert "Fidelity" not in html and "Not priced" not in html, "unpriced lines stay off the PDF"
+    assert "subject to the insurer" in html
 
 
 def test_case_pdf_produces_a_pdf():

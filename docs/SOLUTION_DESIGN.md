@@ -219,10 +219,13 @@ FastAPI + Jinja, single implicit reviewer, no auth:
    edit. *Save & go back* writes the edits into the draft; nothing is stored
    until the Price gate's approve.
 
-The decision page shows **Checked by** and offers a client-facing PDF
-(`pdf.py`, xhtml2pdf) that omits internal codes — factor slugs, precedent ids,
-confidence, reviewer edits — and includes the premium calculation with any
-overrides disclosed. Pricing of a stored case can be adjusted afterwards
+The decision page is the insurer document, and the PDF (`pdf.py`, xhtml2pdf)
+mirrors it: Part 1 the quotation — summary, itemised sections (sum insured,
+rate, loading, premium), terms, **Prepared by** — and Part 2 the risk
+assessment behind it, one statement per finding (title, severity, reasoning).
+Internal material — factor slugs, precedent ids, confidence, evidence quotes,
+reviewer edits, loading overrides — stays on the review and pricing pages and
+in the case record. Pricing of a stored case can be adjusted afterwards
 (loadings only; ratings are fixed once approved).
 
 ### 4.6 `pricing.py` — the deterministic pricing engine

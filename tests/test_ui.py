@@ -110,7 +110,7 @@ def test_adjust_pricing_for_a_stored_case_keeps_ratings_read_only():
     assert "Save pricing" in html
 
 
-def test_report_renders_needs_rationale_reviewer_notes_and_checked_by():
+def test_report_is_the_insurer_document_quote_first():
     case = CaseRecord(
         case_id="C-0002", created_at="2026-08-07T10:00:00", source="assessment",
         client_profile=PROFILE, summary=PROFILE.summary, needs=NEEDS,
@@ -124,14 +124,13 @@ def test_report_renders_needs_rationale_reviewer_notes_and_checked_by():
 
     html = render_report(case, "fake", "2026-08-07 10:00")
 
-    assert "Checked by Sashin" in html
+    assert "Prepared by Sashin" in html
     assert "Human approved" not in html
-    assert "playbook" not in html.lower() and "/learning/" not in html
-    assert "Needs determination" in html
-    assert "Gas kitchen on site." in html
-    assert "Certificates are non-negotiable." in html
-    assert "Premiums are deterministic" in html
-    assert "Theft" not in html.split("Premium calculation")[1], "unpriced lines stay off the report"
+    assert html.index("Quote summary") < html.index("Itemised quote") < html.index("Risk assessment")
+    assert "Needs determination" not in html and "Gas kitchen on site." not in html, "the needs table is gone"
+    assert "Certificates are non-negotiable." not in html, "reviewer notes are internal"
+    assert "Gas certificate: Missing" not in html, "evidence quotes are internal"
+    assert "Theft" not in html.split("Quote summary")[1], "unpriced lines stay off the quote"
     assert 'action="/cases/C-0002/delete"' in html
 
 

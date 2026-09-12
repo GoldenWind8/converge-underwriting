@@ -22,7 +22,7 @@ flowchart LR
     G2 -.->|review findings<br/>& evidence| R[review page<br/>evidence, add / remove,<br/>why-notes · Save & go back]
     R -.-> G2
     G2 -->|approve| M
-    G2 --> E[report.py<br/>decision page<br/>Checked by X] --> PDF[pdf.py<br/>client-facing PDF]
+    G2 --> E[report.py<br/>quotation + risk assessment<br/>Prepared by X] --> PDF[pdf.py<br/>insurer-facing PDF]
     M -->|delete + reason| H[deleted log on /cases]
 ```
 
@@ -84,7 +84,7 @@ rated (e.g. crediting mitigation factors) by changing that one function.
 | `app/memory.py` | SQLite case store, LLM-as-picker retrieval scoped to the sections being assessed, soft delete | you want smarter retrieval (e.g. embeddings) — swap `retrieve()` only |
 | `app/main.py` | FastAPI routes (thin plumbing) | you add a page or endpoint |
 | `app/report.py` + `templates/` | HTML rendering only | you change how pages look |
-| `app/pdf.py` + `templates/case_pdf.html` | Client-facing PDF of an approved case, via xhtml2pdf | you change what the client sees |
+| `app/pdf.py` + `templates/case_pdf.html` | Insurer-facing PDF of an approved case (mirrors `report.html`), via xhtml2pdf | you change what the insurer sees |
 | `app/ingest_chats.py` | One-off: seed memory (provisional) from historical chat transcripts | you get real client chat exports |
 | `app/evaluate.py` | Proves learning: memory-on vs memory-off, leave-one-out | before a pitch |
 
