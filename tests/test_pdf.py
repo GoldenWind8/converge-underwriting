@@ -60,7 +60,7 @@ def test_pdf_leads_with_the_quote():
     # Amounts are rendered with non-breaking spaces so they never wrap in the PDF.
     html = render_case_pdf_html(priced, "2026-08-27 19:00").replace("&nbsp;", " ")
 
-    assert html.index("Quote summary") < html.index("Itemised quote") < html.index("Risk assessment")
+    assert html.index(">Quote<") < html.index("Risk assessment")
     assert "R 82 800" in html and "R 18 000 000" in html
     assert "R 72 000" not in html, "the base premium is internal"
     assert "band table" not in html, "the applied loading is the quoted loading; overrides are internal"

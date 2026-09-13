@@ -97,8 +97,8 @@ with your correction quoted in the prompt.
 
 Once a case is approved, **Save PDF copy** on the decision page (or `GET /cases/{id}/pdf`)
 downloads the insurer-facing document: `app/templates/case_pdf.html` rendered and converted
-with xhtml2pdf (pure Python, no browser needed). Part 1 is the quotation (summary, itemised
-sections, terms, "Prepared by"); Part 2 the risk assessment behind it — findings per section
+with xhtml2pdf (pure Python, no browser needed). Part 1 is the quotation (itemised
+sections, total, terms, "Prepared by"); Part 2 the risk assessment behind it — findings per section
 as title, severity and reasoning. Internal material — factor slugs, precedent ids, confidence,
 evidence quotes, reviewer edits, loading overrides — is left out.
 

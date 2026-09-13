@@ -126,11 +126,11 @@ def test_report_is_the_insurer_document_quote_first():
 
     assert "Prepared by Sashin" in html
     assert "Human approved" not in html
-    assert html.index("Quote summary") < html.index("Itemised quote") < html.index("Risk assessment")
+    assert html.index(">Quote<") < html.index("Risk assessment")
     assert "Needs determination" not in html and "Gas kitchen on site." not in html, "the needs table is gone"
     assert "Certificates are non-negotiable." not in html, "reviewer notes are internal"
     assert "Gas certificate: Missing" not in html, "evidence quotes are internal"
-    assert "Theft" not in html.split("Quote summary")[1], "unpriced lines stay off the quote"
+    assert "Theft" not in html.split(">Quote<")[1], "unpriced lines stay off the quote"
     assert 'action="/cases/C-0002/delete"' in html
 
 

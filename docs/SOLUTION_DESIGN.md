@@ -220,8 +220,8 @@ FastAPI + Jinja, single implicit reviewer, no auth:
    until the Price gate's approve.
 
 The decision page is the insurer document, and the PDF (`pdf.py`, xhtml2pdf)
-mirrors it: Part 1 the quotation — summary, itemised sections (sum insured,
-rate, loading, premium), terms, **Prepared by** — and Part 2 the risk
+mirrors it: Part 1 the quotation — itemised sections (sum insured,
+rate, loading, premium), total, terms, **Prepared by** — and Part 2 the risk
 assessment behind it, one statement per finding (title, severity, reasoning).
 Internal material — factor slugs, precedent ids, confidence, evidence quotes,
 reviewer edits, loading overrides — stays on the review and pricing pages and

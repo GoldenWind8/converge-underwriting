@@ -3,7 +3,7 @@ PDF export of an approved case: case_pdf.html rendered with Jinja, then
 converted with xhtml2pdf (pure Python — no browser or system libraries).
 
 The PDF is the insurer-facing document, mirroring report.html: Part 1 the
-quotation (summary, itemised sections, terms), Part 2 the risk assessment
+quotation (itemised sections, total, terms), Part 2 the risk assessment
 behind it (findings per section: title, severity, reasoning). Internal
 material — factor slugs, precedent ids, confidence, evidence quotes,
 reviewer edits, loading overrides — is deliberately left out.

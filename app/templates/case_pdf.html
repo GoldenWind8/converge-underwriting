@@ -4,73 +4,69 @@
 <meta charset="utf-8" />
 <title>Quotation — {{ case.client_profile.business_name or "Unnamed applicant" }}</title>
 <style>
-  /* xhtml2pdf: keep to simple block/table CSS — no flex, no grid. */
+  /* xhtml2pdf: keep to simple block/table CSS — no flex, no grid, no float. */
   @page {
     size: a4 portrait;
-    margin: 20mm 18mm 24mm 18mm;
-    @frame footer { -pdf-frame-content: footer; bottom: 8mm; margin-left: 18mm; margin-right: 18mm; height: 12mm; }
+    margin: 22mm 20mm 24mm 20mm;
+    @frame footer { -pdf-frame-content: footer; bottom: 9mm; margin-left: 20mm; margin-right: 20mm; height: 10mm; }
   }
-  body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #20232d; line-height: 1.45; }
-  h1 { font-size: 22pt; color: #0f1120; margin: 0 0 4pt 0; }
-  h2 { font-size: 13pt; color: #0f1120; margin: 20pt 0 8pt 0; padding-bottom: 4pt; border-bottom: 1px solid #dfe1e8; }
-  .banner { margin: 16pt 0 6pt 0; background-color: #292c38; -pdf-keep-with-next: true; }
-  .banner td { padding: 5pt 8pt; color: #ffffff; font-size: 11pt; font-weight: bold; }
-  .banner .r { text-align: right; font-size: 9pt; }
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #1a1d26; line-height: 1.5; }
+  h1 { font-size: 24pt; font-weight: bold; color: #0f1120; margin: 0; line-height: 1.15; }
+  h2 { font-size: 9pt; font-weight: bold; color: #646875; letter-spacing: 1.5pt; text-transform: uppercase; margin: 26pt 0 8pt 0; padding-bottom: 6pt; border-bottom: 1px solid #0f1120; }
   p { margin: 0 0 6pt 0; }
-  .eyebrow { font-size: 8pt; color: #4f6ef7; font-weight: bold; letter-spacing: 1pt; text-transform: uppercase; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { vertical-align: top; padding: 0; }
+  .eyebrow { font-size: 8pt; color: #4f6ef7; font-weight: bold; letter-spacing: 1.5pt; text-transform: uppercase; margin-bottom: 4pt; }
   .muted { color: #646875; }
   .small { font-size: 8.5pt; }
-  table { width: 100%; border-collapse: collapse; }
-  td, th { vertical-align: top; padding: 5pt 6pt; }
-  th { text-align: left; font-size: 8pt; color: #646875; text-transform: uppercase; background-color: #f5f6f8; border-bottom: 1px solid #dfe1e8; }
-  .meta td { padding: 2pt 0; }
-  .meta .k { width: 32%; color: #646875; font-size: 8.5pt; text-transform: uppercase; }
-  .quote td { border-bottom: 1px solid #eceef3; font-size: 9.5pt; }
+  .head td { padding: 0; }
+  .head .meta { width: 34%; text-align: right; font-size: 8.5pt; color: #646875; line-height: 1.6; }
+  .head .meta b { color: #1a1d26; font-weight: normal; }
+  .applicant { font-size: 10.5pt; color: #646875; margin-top: 4pt; }
+  .risk { margin-top: 14pt; padding-top: 10pt; border-top: 1px solid #dfe1e8; font-size: 9pt; color: #646875; letter-spacing: 1pt; text-transform: uppercase; }
+  .risk .band { letter-spacing: 0; text-transform: none; font-size: 11pt; font-weight: bold; }
+  .band-Low { color: #208567; } .band-Moderate { color: #b47913; } .band-Elevated { color: #c65b21; } .band-High { color: #b83c3c; }
+  .quote th { text-align: left; font-size: 8pt; font-weight: normal; color: #646875; text-transform: uppercase; letter-spacing: .5pt; padding: 0 0 6pt 0; border-bottom: 1px solid #dfe1e8; }
+  .quote td { padding: 8pt 0; border-bottom: 1px solid #eceef3; font-size: 10pt; }
   .quote .r { text-align: right; }
-  .quote .total td { border-top: 2px solid #dfe1e8; border-bottom: 0; font-weight: bold; font-size: 10.5pt; }
-  .sub { font-size: 8pt; color: #646875; }
-  .band-Low { color: #208567; font-weight: bold; } .band-Moderate { color: #b47913; font-weight: bold; }
-  .band-Elevated { color: #c65b21; font-weight: bold; } .band-High { color: #b83c3c; font-weight: bold; }
-  .closing { margin-top: 22pt; padding: 8pt 10pt; background-color: #f5f6f8; border: 1px solid #dfe1e8; font-size: 8.5pt; color: #646875; }
-  .part { font-size: 8pt; color: #646875; margin-bottom: 2pt; }
-  .finding td { padding: 8pt 0 10pt 0; border-bottom: 1px solid #eceef3; }
-  .finding-title { font-size: 11pt; font-weight: bold; color: #0f1120; }
-  .sev { font-size: 8pt; font-weight: bold; text-transform: uppercase; }
+  .quote .sub { font-size: 8pt; color: #646875; }
+  .quote .total td { padding-top: 10pt; border-top: 1px solid #0f1120; border-bottom: 0; font-weight: bold; font-size: 11pt; }
+  .closing { margin-top: 26pt; font-size: 8.5pt; color: #646875; line-height: 1.6; }
+  .closing b { color: #1a1d26; font-weight: normal; }
+  .sect td { padding: 14pt 0 4pt 0; border-bottom: 1px solid #0f1120; font-size: 11pt; font-weight: bold; color: #0f1120; -pdf-keep-with-next: true; }
+  .sect .r { text-align: right; font-size: 9pt; }
+  .finding td { padding: 9pt 0 9pt 0; border-bottom: 1px solid #eceef3; }
+  .finding-title { font-weight: bold; color: #0f1120; }
+  .sev { font-size: 8pt; text-transform: uppercase; letter-spacing: .5pt; }
   .sev-severe { color: #7d1f1f; } .sev-high { color: #b83c3c; } .sev-medium { color: #c65b21; } .sev-low { color: #b47913; }
-  #footer { font-size: 8pt; color: #8292a0; text-align: center; }
+  #footer { font-size: 8pt; color: #8292a0; }
+  #footer td { padding: 0; }
 </style>
 </head>
 <body>
 
-<div id="footer">
-  Converge Underwriting · Quotation · {{ case.case_id }}{% if case.checked_by %} · Prepared by {{ case.checked_by }}{% endif %} · Page <pdf:pagenumber /> of <pdf:pagecount />
-</div>
+<div id="footer"><table><tr><td>Converge Underwriting · {{ case.case_id }}</td><td style="text-align:right">Page <pdf:pagenumber /> of <pdf:pagecount /></td></tr></table></div>
 
-{% if logo_path %}<img src="{{ logo_path }}" width="180" alt="Converge Underwriting" /><br /><br />{% endif %}
+{% if logo_path %}<img src="{{ logo_path }}" width="150" alt="Converge Underwriting" /><br /><br /><br />{% endif %}
 
-<div class="eyebrow">Quotation</div>
-<h1>{{ case.client_profile.business_name or "Unnamed applicant" }}</h1>
-<p class="muted">{{ case.client_profile.industry or "Industry not stated" }}{% if case.client_profile.employees is not none %} &middot; {{ case.client_profile.employees }} employees{% endif %}</p>
+<table class="head"><tr>
+  <td>
+    <div class="eyebrow">Quotation</div>
+    <h1>{{ case.client_profile.business_name or "Unnamed applicant" }}</h1>
+    <div class="applicant">{{ case.client_profile.industry or "Industry not stated" }}{% if case.client_profile.employees is not none %} &middot; {{ case.client_profile.employees }} employees{% endif %}</div>
+  </td>
+  <td class="meta">
+    Reference <b>{{ case.case_id }}</b><br />
+    Assessed <b>{{ case.created_at[:10] }}</b><br />
+    Generated <b>{{ generated_at }}</b><br />
+    {% if case.checked_by %}Prepared by <b>{{ case.checked_by }}</b>{% else %}<b>Human approved &#10003;</b>{% endif %}
+  </td>
+</tr></table>
 
-<table class="meta">
-  <tr><td class="k">Reference</td><td>{{ case.case_id }}</td></tr>
-  <tr><td class="k">Assessment date</td><td>{{ case.created_at[:10] }}</td></tr>
-  <tr><td class="k">Generated</td><td>{{ generated_at }}</td></tr>
-  <tr><td class="k">Prepared by</td><td>{% if case.checked_by %}{{ case.checked_by }}{% else %}Human approved &#10003;{% endif %}</td></tr>
-</table>
+<div class="risk">Overall risk &nbsp; <span class="band band-{{ case.final_band }}">{{ case.final_band }}</span></div>
 
+<h2>Quote</h2>
 {% if priced %}
-<h2>Quote summary</h2>
-<table class="quote">
-  <tr><th style="width:50%">Section</th><th class="r" style="width:25%">Sum insured</th><th class="r" style="width:25%">Annual premium</th></tr>
-  {% for line in priced %}
-  <tr><td>{{ section(line.section).name }}</td><td class="r">{{ line.sum_insured|rand|replace(" ", "&nbsp;")|safe }}</td><td class="r">{{ line.adjusted_premium|rand|replace(" ", "&nbsp;")|safe }}</td></tr>
-  {% endfor %}
-  <tr class="total"><td>Total, per annum</td><td>&nbsp;</td><td class="r">{{ case.pricing.adjusted_total|rand|replace(" ", "&nbsp;")|safe }}</td></tr>
-</table>
-<p style="margin-top:8pt">Overall risk: <span class="band-{{ case.final_band }}">{{ case.final_band }}</span></p>
-
-<h2>Itemised quote</h2>
 <table class="quote">
   <tr><th style="width:34%">Section</th><th class="r" style="width:18%">Sum insured</th><th class="r" style="width:12%">Rate</th><th class="r" style="width:16%">Loading</th><th class="r" style="width:20%">Annual premium</th></tr>
   {% for line in priced %}
@@ -79,29 +75,28 @@
   <tr class="total"><td>Total, per annum</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td class="r">{{ case.pricing.adjusted_total|rand|replace(" ", "&nbsp;")|safe }}</td></tr>
 </table>
 {% else %}
-<h2>Quote summary</h2>
 <p class="muted">No premium quoted &mdash; no sums insured on file.</p>
 {% endif %}
 
 <div class="closing">
   Premiums are proposed on the stated sums insured, base rates and risk loadings; subject to the insurer's acceptance and policy terms.<br />
-  <strong>{% if case.checked_by %}Prepared by {{ case.checked_by }}{% else %}Human approved{% endif %}</strong> &middot; {{ case.created_at[:10] }} &middot; Converge AI (Pty) Ltd &middot; Johannesburg, South Africa &middot; convergeai.co.za
+  <b>{% if case.checked_by %}Prepared by {{ case.checked_by }}{% else %}Human approved{% endif %}</b> &middot; {{ case.created_at[:10] }} &middot; Converge AI (Pty) Ltd &middot; Johannesburg &middot; convergeai.co.za
 </div>
 
 <pdf:nextpage />
 
-<div class="part">{{ case.client_profile.business_name or "Unnamed applicant" }} &middot; {{ case.case_id }}</div>
-<h1>Risk assessment</h1>
-{% if case.summary or case.client_profile.summary %}<p style="margin-top:8pt">{{ case.summary or case.client_profile.summary }}</p>{% endif %}
+<div class="eyebrow">Risk assessment</div>
+<h1>{{ case.client_profile.business_name or "Unnamed applicant" }}</h1>
+<div class="applicant">{{ case.case_id }}</div>
+{% if case.summary or case.client_profile.summary %}<p style="margin-top:14pt">{{ case.summary or case.client_profile.summary }}</p>{% endif %}
 <p class="small muted">Sections without adverse findings are loaded at their band's table rate.</p>
 
 {% for group in groups %}
-<table class="banner"><tr><td>{{ group.cover.name }}</td><td class="r">{{ group.band }} risk</td></tr></table>
+<table class="sect"><tr><td>{{ group.cover.name }}</td><td class="r band-{{ group.band }}">{{ group.band }}</td></tr></table>
 {% for index, f in group["items"] %}
 <table class="finding"><tr><td>
-  <span class="finding-title">{{ f.factor_name|label }}</span>
-  &nbsp; <span class="sev sev-{{ f.severity.value }}">{{ f.severity.value }} severity</span>
-  <p style="margin-top:3pt">{{ f.reasoning }}</p>
+  <span class="finding-title">{{ f.factor_name|label }}</span> &nbsp; <span class="sev sev-{{ f.severity.value }}">{{ f.severity.value }}</span>
+  <p style="margin:3pt 0 0 0">{{ f.reasoning }}</p>
 </td></tr></table>
 {% endfor %}
 {% else %}

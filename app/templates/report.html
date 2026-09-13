@@ -3,34 +3,33 @@
 {% block css %}
 <style>
   .report-grid { display:grid; grid-template-columns:1fr 300px; gap:18px; align-items:start; }
-  .document { overflow:hidden; }
-  .document-head { padding:28px; color:#fff; background:linear-gradient(135deg,#16181f,#29223f); }
+  .document { padding:40px 44px; }
   .doc-top { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
-  .document-head h1 { color:#fff; margin:3px 0 6px; }.document-head .eyebrow { color:#9ba9ff; }
-  .document-head .applicant { color:#c8d2e6; font-size:12px; }
-  .document-meta { color:#a9bbc7; font-size:11px; text-align:right; line-height:1.7; }
-  .document-body { padding:28px; }
-  .section-title { margin:29px 0 12px; padding-bottom:8px; border-bottom:1px solid var(--line-soft); font-size:13px; text-transform:uppercase; letter-spacing:.07em; }
-  .section-title:first-child { margin-top:0; }
-  .quote-table td, .quote-table th { padding:8px 10px; font-size:12px; }
-  .quote-table td { font-variant-numeric:tabular-nums; }
+  .document h1 { margin:2px 0 4px; font-size:26px; }
+  .document .eyebrow { color:var(--brand); }
+  .applicant { color:var(--muted); font-size:13px; }
+  .document-meta { color:var(--muted); font-size:11px; text-align:right; line-height:1.8; }
+  .document-meta b { color:var(--ink); font-weight:400; }
+  .risk { margin-top:18px; padding-top:12px; border-top:1px solid var(--line-soft); color:var(--muted); font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
+  .risk .band { margin-left:8px; }
+  .section-title { margin:32px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--ink); color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.12em; }
+  .quote-table th { padding:0 0 8px; font-size:10px; font-weight:400; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; border-bottom:1px solid var(--line-soft); }
+  .quote-table td { padding:10px 0; font-size:13px; font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line-soft); }
   .quote-table .r { text-align:right; }
-  .quote-table .total td { border-top:2px solid var(--line); font-weight:700; border-bottom:0; font-size:13px; }
-  .quote-table .sub { display:block; color:var(--muted); font-size:10px; }
-  .overall { margin:12px 0 0; font-size:12px; }
-  .closing { margin-top:26px; padding-top:16px; border-top:1px solid var(--line-soft); color:var(--muted); font-size:11px; line-height:1.6; }
-  .closing strong { color:var(--ink); }
-  .part-break { margin:36px -28px 28px; border-top:6px solid #16181f; }
-  .part-head { display:flex; justify-content:space-between; align-items:baseline; gap:16px; }
-  .part-head h2 { font-size:18px; margin:0 0 4px; }
-  .part-head .ref { color:var(--muted); font-size:11px; }
-  .cover-banner { margin:20px 0 4px; padding:9px 13px; border-left:3px solid var(--brand); background:#f7f8ff; border-radius:0 8px 8px 0; font-weight:700; font-size:13px; display:flex; justify-content:space-between; align-items:center; }
-  .finding { padding:14px 0; border-bottom:1px solid var(--line-soft); }.finding:last-child { border:0; }
-  .finding-title { margin-bottom:4px; font-weight:700; }
-  .finding p { margin:6px 0 0; }
+  .quote-table .sub { display:block; color:var(--muted); font-size:11px; }
+  .quote-table .total td { padding-top:12px; border-top:1px solid var(--ink); border-bottom:0; font-weight:700; font-size:14px; }
+  .closing { margin-top:28px; color:var(--muted); font-size:11px; line-height:1.7; }
+  .closing b { color:var(--ink); font-weight:400; }
+  .part-break { margin:44px 0 36px; border-top:1px solid var(--line-soft); }
+  .sect { display:flex; justify-content:space-between; align-items:baseline; margin-top:26px; padding-bottom:6px; border-bottom:1px solid var(--ink); font-weight:700; font-size:14px; }
+  .sect .band { font-size:11px; }
+  .finding { padding:12px 0; border-bottom:1px solid var(--line-soft); }
+  .finding-title { font-weight:700; }
+  .finding .severity { margin-left:6px; }
+  .finding p { margin:4px 0 0; }
   .side-stack { display:grid; gap:14px; position:sticky; top:86px; }.side-card { padding:18px; }.side-card h3 { margin-bottom:12px; }
   @media(max-width:920px){.report-grid{grid-template-columns:1fr}.side-stack{position:relative;top:auto;grid-template-columns:1fr 1fr}}
-  @media(max-width:620px){.doc-top{align-items:flex-start;flex-direction:column}.side-stack{grid-template-columns:1fr}.document-meta{text-align:left}.document-head,.document-body{padding:21px}.part-break{margin-left:-21px;margin-right:-21px}}
+  @media(max-width:620px){.doc-top{flex-direction:column}.side-stack{grid-template-columns:1fr}.document-meta{text-align:left}.document{padding:24px}}
 </style>
 {% endblock %}
 {% block content %}
@@ -39,56 +38,45 @@
   </div>
   <div class="report-grid">
     <article class="card document">
-      <header class="document-head">
-        <div class="doc-top">
-          <div>
-            <div class="eyebrow">Quotation</div>
-            <h1>{{ case.client_profile.business_name or "Unnamed applicant" }}</h1>
-            <div class="applicant">{{ case.client_profile.industry or "Industry not stated" }}{% if case.client_profile.employees is not none %} · {{ case.client_profile.employees }} employees{% endif %}</div>
-          </div>
-          <div class="document-meta">Reference {{ case.case_id }}<br>Assessed {{ case.created_at[:10] }}<br>Generated {{ generated_at }}<br>{% if case.checked_by %}Prepared by {{ case.checked_by }}{% else %}Human approved ✓{% endif %}</div>
+      <div class="doc-top">
+        <div>
+          <div class="eyebrow">Quotation</div>
+          <h1>{{ case.client_profile.business_name or "Unnamed applicant" }}</h1>
+          <div class="applicant">{{ case.client_profile.industry or "Industry not stated" }}{% if case.client_profile.employees is not none %} · {{ case.client_profile.employees }} employees{% endif %}</div>
         </div>
-      </header>
-      <div class="document-body">
-        {% if priced %}
-        <h2 class="section-title">Quote summary</h2>
-        <table class="quote-table">
-          <thead><tr><th>Section</th><th class="r">Sum insured</th><th class="r">Annual premium</th></tr></thead>
-          <tbody>
-            {% for line in priced %}<tr><td>{{ section(line.section).name }}</td><td class="r">{{ line.sum_insured|rand }}</td><td class="r">{{ line.adjusted_premium|rand }}</td></tr>{% endfor %}
-            <tr class="total"><td>Total · per annum</td><td></td><td class="r">{{ case.pricing.adjusted_total|rand }}</td></tr>
-          </tbody>
-        </table>
-        <p class="overall">Overall risk: <span class="band {{ case.final_band }}">{{ case.final_band }}</span></p>
-
-        <h2 class="section-title">Itemised quote</h2>
-        <table class="quote-table">
-          <thead><tr><th>Section</th><th class="r">Sum insured</th><th class="r">Rate</th><th class="r">Loading</th><th class="r">Annual premium</th></tr></thead>
-          <tbody>
-            {% for line in priced %}
-            <tr><td>{{ section(line.section).name }}{% if sub_types.get(line.section) %}<span class="sub">{{ sub_types[line.section] }}</span>{% endif %}{% if line.basis %}<span class="sub">{{ line.basis }}</span>{% endif %}</td><td class="r">{{ line.sum_insured|rand }}</td><td class="r">{{ "%g"|format(line.rate) }}%</td><td class="r">{{ "%+g"|format(line.applied_loading) }}%<span class="sub">{{ line.band }}</span></td><td class="r">{{ line.adjusted_premium|rand }}</td></tr>
-            {% endfor %}
-            <tr class="total"><td>Total · per annum</td><td></td><td></td><td></td><td class="r">{{ case.pricing.adjusted_total|rand }}</td></tr>
-          </tbody>
-        </table>
-        {% else %}
-        <h2 class="section-title">Quote summary</h2>
-        <div class="empty">No premium quoted — no sums insured on file.</div>
-        {% endif %}
-        <div class="closing">
-          Premiums are proposed on the stated sums insured, base rates and risk loadings; subject to the insurer's acceptance and policy terms.<br>
-          <strong>{% if case.checked_by %}Prepared by {{ case.checked_by }}{% else %}Human approved{% endif %}</strong> · {{ case.created_at[:10] }} · Converge AI (Pty) Ltd · Johannesburg · convergeai.co.za
-        </div>
-
-        <div class="part-break"></div>
-        <div class="part-head"><h2>Risk assessment</h2><span class="ref">{{ case.client_profile.business_name or "Unnamed applicant" }} · {{ case.case_id }}</span></div>
-        {% if case.summary or case.client_profile.summary %}<p style="margin:12px 0 0">{{ case.summary or case.client_profile.summary }}</p>{% endif %}
-        <p class="hint" style="margin-top:10px">Sections without adverse findings are loaded at their band's table rate.</p>
-        {% for group in groups %}
-        <div class="cover-banner"><span>{{ group.cover.name }}</span><span class="band {{ group.band }}">{{ group.band }}</span></div>
-        {% for index, f in group["items"] %}<div class="finding"><div class="finding-title">{{ f.factor_name|label }}</div><span class="severity {{ f.severity.value }}">{{ f.severity.value }} severity</span><p>{{ f.reasoning }}</p></div>{% endfor %}
-        {% else %}<div class="empty">No adverse findings were recorded.</div>{% endfor %}
+        <div class="document-meta">Reference <b>{{ case.case_id }}</b><br>Assessed <b>{{ case.created_at[:10] }}</b><br>Generated <b>{{ generated_at }}</b><br>{% if case.checked_by %}Prepared by <b>{{ case.checked_by }}</b>{% else %}<b>Human approved ✓</b>{% endif %}</div>
       </div>
+      <div class="risk">Overall risk <span class="band {{ case.final_band }}">{{ case.final_band }}</span></div>
+
+      <h2 class="section-title">Quote</h2>
+      {% if priced %}
+      <table class="quote-table">
+        <thead><tr><th>Section</th><th class="r">Sum insured</th><th class="r">Rate</th><th class="r">Loading</th><th class="r">Annual premium</th></tr></thead>
+        <tbody>
+          {% for line in priced %}
+          <tr><td>{{ section(line.section).name }}{% if sub_types.get(line.section) %}<span class="sub">{{ sub_types[line.section] }}</span>{% endif %}{% if line.basis %}<span class="sub">{{ line.basis }}</span>{% endif %}</td><td class="r">{{ line.sum_insured|rand }}</td><td class="r">{{ "%g"|format(line.rate) }}%</td><td class="r">{{ "%+g"|format(line.applied_loading) }}%<span class="sub">{{ line.band }}</span></td><td class="r">{{ line.adjusted_premium|rand }}</td></tr>
+          {% endfor %}
+          <tr class="total"><td>Total, per annum</td><td></td><td></td><td></td><td class="r">{{ case.pricing.adjusted_total|rand }}</td></tr>
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">No premium quoted — no sums insured on file.</div>
+      {% endif %}
+      <div class="closing">
+        Premiums are proposed on the stated sums insured, base rates and risk loadings; subject to the insurer's acceptance and policy terms.<br>
+        <b>{% if case.checked_by %}Prepared by {{ case.checked_by }}{% else %}Human approved{% endif %}</b> · {{ case.created_at[:10] }} · Converge AI (Pty) Ltd · Johannesburg · convergeai.co.za
+      </div>
+
+      <div class="part-break"></div>
+      <div class="eyebrow">Risk assessment</div>
+      <h1>{{ case.client_profile.business_name or "Unnamed applicant" }}</h1>
+      <div class="applicant">{{ case.case_id }}</div>
+      {% if case.summary or case.client_profile.summary %}<p style="margin:16px 0 0">{{ case.summary or case.client_profile.summary }}</p>{% endif %}
+      <p class="hint" style="margin-top:8px">Sections without adverse findings are loaded at their band's table rate.</p>
+      {% for group in groups %}
+      <div class="sect"><span>{{ group.cover.name }}</span><span class="band {{ group.band }}">{{ group.band }}</span></div>
+      {% for index, f in group["items"] %}<div class="finding"><span class="finding-title">{{ f.factor_name|label }}</span><span class="severity {{ f.severity.value }}">{{ f.severity.value }}</span><p>{{ f.reasoning }}</p></div>{% endfor %}
+      {% else %}<div class="empty">No adverse findings were recorded.</div>{% endfor %}
     </article>
     <aside class="side-stack noprint">
       <div class="card side-card"><h3>Next action</h3><p class="hint">Assess a comparable applicant to see this decision retrieved as precedent.</p><a class="btn" href="/cases/{{ case.case_id }}/pdf" style="width:100%">Save PDF copy ↓</a><a class="btn secondary" href="/cases/{{ case.case_id }}/pricing" style="width:100%;margin-top:8px">Adjust pricing</a><a class="btn secondary" href="/" style="width:100%;margin-top:8px">New assessment →</a><a class="btn secondary" href="/cases" style="width:100%;margin-top:8px">View case memory</a></div>
