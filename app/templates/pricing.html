@@ -148,21 +148,27 @@
 {% endblock %}
 {% block scripts %}
 <script>
-  // Mirrors guardrails.band_for_section + pricing.price_case for instant
+  // Mirrors guardrails.score_section + pricing.price_case for instant
   // feedback; the saved ratings and premiums are recomputed server-side.
+  // Points and thresholds are the server's own config/severity_points.json,
+  // so a tuned config can never show a band /approve disagrees with.
   const LOADINGS={{ loadings|tojson }};
+  const SEVERITY_POINTS = {{ severity_points|tojson }};
+  const BAND_THRESHOLDS = {{ band_thresholds|tojson }};
   const ZAR=n=>'R '+Math.round(n).toLocaleString('en-US').replace(/,/g,' ');
   const signed=v=>(v>=0?'+':'')+v+'%';
-  function bandFor(counts){
-    if(counts.severe>=1||counts.high>=3)return 'High';
-    if(counts.high>=1||counts.medium>=3)return 'Elevated';
-    if(counts.medium>=1)return 'Moderate';
-    return 'Low';
+  function bandForScore(score){
+    for(const row of BAND_THRESHOLDS){
+      if(row.band==='High'){if(score>=row.lo&&score<=row.hi)return row.band;}
+      else if(score>=row.lo&&score<row.hi)return row.band;
+    }
+    return score<0?'Low':'High';
   }
   function reband(row){
-    const why=row.nextElementSibling,counts={low:0,medium:0,high:0,severe:0};
-    why.querySelectorAll('.severity-input').forEach(s=>counts[s.value]++);
-    const band=bandFor(counts),table=Number(LOADINGS[band]);
+    const why=row.nextElementSibling,points=[];
+    why.querySelectorAll('.severity-input').forEach(s=>points.push(SEVERITY_POINTS[s.value]));
+    const score=points.length?points.reduce((a,b)=>a+b,0)/points.length:0;
+    const band=bandForScore(score),table=Number(LOADINGS[band]);
     row.dataset.table=table;
     const pill=row.querySelector('.band');pill.textContent=band;pill.className='band '+band;
     why.querySelector('.band-word').textContent=band;

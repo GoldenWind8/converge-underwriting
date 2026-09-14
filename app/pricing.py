@@ -21,11 +21,9 @@ stand-ins until the broker's rate sheet arrives.
 from __future__ import annotations
 
 import json
-import os
-from pathlib import Path
 from typing import Dict, List, Optional
 
-from .guardrails import band_for_section
+from .guardrails import config_dir, load_scoring_config, score_section
 from .models import (CasePricing, PricedSection, Requirement, RiskFinding,
                      SectionNeed, SumInsured)
 from .sections import SectionId, section
@@ -65,10 +63,6 @@ DEFAULT_LOADINGS: Dict[str, float] = {
     "Elevated": 10.0,
     "High": 25.0,
 }
-
-
-def config_dir() -> Path:
-    return Path(os.environ.get("UW_CONFIG_DIR", Path(__file__).resolve().parent.parent / "config"))
 
 
 def _load(filename: str, defaults: dict) -> dict:
@@ -124,6 +118,7 @@ def price_case(
     overrides = overrides or {}
     rates = load_rates()
     loadings = load_loadings()
+    scoring = load_scoring_config()
 
     by_section: Dict[SectionId, List[RiskFinding]] = {}
     for f in findings:
@@ -136,7 +131,8 @@ def price_case(
         key=lambda n: section(n.section).number,
     )
     for need in required:
-        band = band_for_section(by_section.get(need.section, []))
+        scored = score_section(by_section.get(need.section, []), scoring)
+        band = scored.band
         rate = float(rates[need.section.value]["rate"])
         table_loading = float(loadings[band])
         applied_loading = float(overrides.get(need.section, table_loading))
@@ -144,6 +140,8 @@ def price_case(
         line = PricedSection(
             section=need.section,
             band=band,
+            risk_score=scored.risk_score,
+            score_explanation=scored.explanation,
             rate=rate,
             table_loading=table_loading,
             applied_loading=applied_loading,

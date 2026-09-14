@@ -1,4 +1,10 @@
-from app.guardrails import GuardrailResult
+import json
+import os
+import re
+from pathlib import Path
+
+from app.guardrails import (GuardrailResult, load_scoring_config,
+                            score_findings)
 from app.models import (CaseRecord, ClientProfile, Correction,
                         NeedsDetermination, Requirement, RiskAssessmentDraft,
                         RiskFinding, SectionNeed, Severity, SumInsured)
@@ -25,6 +31,13 @@ NEEDS = _repair([SectionNeed(section=SectionId.fire, requirement=Requirement.req
                              reason="Gas kitchen on site.")])
 
 
+def _injected(html: str, name: str):
+    """The JSON constant the review page hands to its client-side recalc."""
+    match = re.search(rf"const {name} = (.+?);\n", html)
+    assert match, f"{name} is not injected into the review page"
+    return json.loads(match.group(1))
+
+
 def test_needs_page_renders_all_sections_and_gate_one_controls():
     determination = NeedsDetermination(business_note="A restaurant.", needs=NEEDS)
 
@@ -44,7 +57,8 @@ def test_review_workspace_renders_sections_and_why_note():
         "factor_name": "gas_bi_dependency", "section": SectionId.business_interruption,
     })
     draft = RiskAssessmentDraft(client_profile=PROFILE, findings=[FINDING, second])
-    result = GuardrailResult(findings=[FINDING, second], band="Elevated")
+    result = GuardrailResult(findings=[FINDING, second], band="Elevated", risk_score=62.5,
+                             score_explanation="test")
 
     html = render_review(
         "draft-1", draft, result, "fake", "2026-08-07 10:00",
@@ -63,11 +77,66 @@ def test_review_workspace_renders_sections_and_why_note():
     assert 'name="new_evidence_quote"' in html
     assert 'name="note_0"' in html, "the why-note input must be on every finding"
     assert "3 model call(s)" in html
-    assert "points" not in html.lower(), "no score anywhere on the review surface"
+    assert "62.50" not in html and 'id="live-score"' not in html, (
+        "numeric risk scores stay off the review surface"
+    )
+    assert "Draft referral band" in html
     assert html.count('<details class="section-block" open>') == 2, "one collapsible block per section"
     assert 'id="toggle-all"' in html
     assert "Uncertified gas" in html and 'class="mono">uncertified_gas' not in html, \
         "the screen shows plain English, never the snake_case factor id"
+
+
+def test_review_recalc_is_handed_the_config_the_server_bands_with():
+    """The in-page recalc must reach the same verdict /approve will store, so a
+    tuned severity_points.json has to drive both sides, not just the server."""
+    config_dir = Path(os.environ["UW_CONFIG_DIR"])
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "severity_points.json").write_text(json.dumps({
+        "points": {"low": 4.0, "medium": 30.0, "high": 80.0, "severe": 96.0},
+        "thresholds": {"Low": [0, 20], "Moderate": [20, 45],
+                       "Elevated": [45, 70], "High": [70, 100]},
+    }), encoding="utf-8")
+    points, thresholds = load_scoring_config()
+    scored = score_findings([FINDING])
+    # The lone high finding is worth 80 under this config, which that config
+    # bands High — under the defaults it would be 62.5 and only Elevated.
+    assert (scored.risk_score, scored.band) == (80.0, "High")
+
+    draft = RiskAssessmentDraft(client_profile=PROFILE, findings=[FINDING])
+    html = render_review(
+        "draft-2", draft,
+        GuardrailResult(findings=[FINDING], band=scored.band,
+                        risk_score=scored.risk_score,
+                        score_explanation=scored.explanation),
+        "fake", "2026-08-07 10:00", "Gas certificate: Missing", needs=NEEDS,
+    )
+
+    assert _injected(html, "SEVERITY_POINTS") == points
+    assert [(r["band"], r["lo"], r["hi"])
+            for r in _injected(html, "BAND_THRESHOLDS")] == thresholds
+    assert 'id="live-band">High</span>' in html
+    assert "80.00" not in html and "live-score" not in html, (
+        "the numeric score stays internal even when config is retuned"
+    )
+    assert "62.5" not in html, "no default point value may survive a tuned config"
+
+
+def test_report_shows_section_bands_not_numeric_scores():
+    """The report shows referral bands and findings; the mean that picked the
+    band stays on the backend."""
+    case = CaseRecord(
+        case_id="C-0003", created_at="2026-08-07T10:00:00", source="assessment",
+        client_profile=PROFILE, summary=PROFILE.summary, needs=NEEDS,
+        draft_findings=[FINDING], approved_findings=[FINDING],
+        final_band="Elevated", risk_score=62.5, pricing=_priced([FINDING]),
+    )
+
+    html = render_report(case, "fake", "2026-08-07 10:00")
+
+    assert 'class="band Elevated"' in html
+    assert "62.50" not in html and "pts" not in html
+    assert "Uncertified gas" in html
 
 
 def _priced(findings):
@@ -92,6 +161,9 @@ def test_price_gate_lists_findings_with_editable_ratings_and_the_commit_bar():
     assert "Approve &amp; price" in html
     assert 'href="/review/draft-1"' in html, "the drill-down link"
     assert "const LOADINGS=" in html, "band -> loading table is available to the live recalc"
+    assert _injected(html, "SEVERITY_POINTS") == load_scoring_config()[0], \
+        "the live re-band scores with the server's own points"
+    assert "62.5" not in html.split("<script>")[0], "numeric scores stay off the page itself"
     assert "Not stated" not in html and "Not priced" not in html
     assert "2 model call(s)" in html
 

@@ -20,11 +20,12 @@ from typing import Dict, List, Optional
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from .guardrails import GuardrailResult, band_for_section
+from .guardrails import (GuardrailResult, band_for_section, band_rule_text,
+                         config_dir, load_scoring_config)
 from .models import (CasePricing, CaseRecord, ClientProfile,
                      NeedsDetermination, RiskAssessmentDraft, RiskFinding,
                      SectionNeed)
-from .pricing import config_dir, load_loadings, load_rates
+from .pricing import load_loadings, load_rates
 from .sections import (COVER_SECTIONS, MOTOR_SUB_TYPE_NOTES, SectionId,
                        section)
 
@@ -112,10 +113,17 @@ def render_review(draft_id: str, draft: RiskAssessmentDraft, result: GuardrailRe
                   needs: Optional[List[SectionNeed]] = None,
                   usage: Optional[dict] = None) -> str:
     needs = needs or []
+    # The live recalc in the page scores exactly as guardrails.score_findings
+    # does, so it is handed the same config the server bands with rather than
+    # a copy of the numbers that could drift from it.
+    points, thresholds = load_scoring_config()
     return _env.get_template("review.html").render(
         draft_id=draft_id, draft=draft, result=result, engine=engine,
         generated_at=generated_at, raw_text=raw_text, needs=needs,
         groups=_section_groups(result.findings, needs), usage=usage,
+        severity_points=points,
+        band_thresholds=[{"band": b, "lo": lo, "hi": hi} for b, lo, hi in thresholds],
+        band_rule=band_rule_text(points, thresholds),
     )
 
 
@@ -152,10 +160,13 @@ def render_pricing(priced: CasePricing, findings: List[RiskFinding], generated_a
     by_section: dict = {}
     for index, f in enumerate(findings):
         by_section.setdefault(f.section, []).append((index, f))
+    points, thresholds = load_scoring_config()
     return _env.get_template("pricing.html").render(
         pricing=priced, findings_by_section=by_section, generated_at=generated_at,
         draft_id=draft_id, case=case, profile=profile or (case.client_profile if case else None),
         usage=usage, rates=load_rates(), loadings=load_loadings(),
+        severity_points=points,
+        band_thresholds=[{"band": b, "lo": lo, "hi": hi} for b, lo, hi in thresholds],
     )
 
 

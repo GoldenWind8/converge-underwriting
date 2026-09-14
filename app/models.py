@@ -16,12 +16,13 @@ The flow's shapes, in pipeline order:
                                      Only records a human signed off ever
                                      become non-provisional CaseRecords.
 
-There is deliberately no numeric score anywhere in the *assessment*: severity
-is a standardised categorical scale, and bands are derived from the severity
-profile by deterministic code in guardrails.py. Money enters exactly twice,
-and never through the assessment model: SumInsured records a figure the
-client stated (confirmed by the broker at gate 1), and CasePricing is the
-output of the deterministic pricing engine in pricing.py.
+Severity on each finding is a standardised categorical scale. A deterministic
+equal-weight mean of severity→points (0–100) in guardrails.py produces the
+referral band — still plain arithmetic an underwriter can reproduce by hand,
+never an LLM-emitted score. Money enters exactly twice, and never through the
+assessment model: SumInsured records a figure the client stated (confirmed by
+the broker at gate 1), and CasePricing is the output of the deterministic
+pricing engine in pricing.py.
 """
 
 from __future__ import annotations
@@ -122,7 +123,9 @@ class PricedSection(BaseModel):
     """One row of the deterministic pricing table (pricing.py — no LLM)."""
 
     section: SectionId
-    band: str  # per-section band from guardrails.band_for_section
+    band: str  # per-section band from guardrails.score_section
+    risk_score: float = 0.0  # equal-weight mean of severity points (0–100)
+    score_explanation: str = ""  # hand-reproducible working for the score
     rate: float  # annual % of sum insured, from the rates config
     table_loading: float  # % the band table dictates
     applied_loading: float  # % actually applied — differs only on a manual override
@@ -163,6 +166,8 @@ class CaseRecord(BaseModel):
     approved_findings: List[RiskFinding] = Field(default_factory=list)
     corrections: List[Correction] = Field(default_factory=list)
     final_band: str = "Low"
+    risk_score: float = 0.0  # case-level equal-weight mean over approved findings
+    score_explanation: str = ""
     checked_by: str = ""  # the underwriter who approved at the Price gate
     # Deterministic premium calculation (pricing.py), set at the Price gate and
     # updated when pricing is adjusted afterwards. None on chat-ingested cases.

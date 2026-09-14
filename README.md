@@ -44,11 +44,15 @@ raw input ─▶ PROFILE ─▶ NEEDS DETERMINATION ─▶ GATE 1: confirm secti
   carrying the reviewer's corrections and why-notes. Every finding must quote
   verbatim evidence.
 - **Guardrails** — deterministic: hallucinated or insubstantial evidence is dropped,
-  unverifiable citations are removed, bands (per case and per section) are derived
-  from the severity profile, and severe / novel / low-confidence findings are
-  referred to a human. The LLM deliberately emits **no numeric score and no price**
-  — severity is a standardised categorical scale (low / medium / high / severe).
-  The exact rules are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#what-guards-what).
+  unverifiable citations are removed, and each finding's severity maps to points
+  (low 12.5 / medium 37.5 / high 62.5 / severe 87.5). The risk score for a cover
+  section (and for the case) is the **equal-weight mean** of those points; the
+  band is Low / Moderate / Elevated / High from thresholds on that mean. The
+  score informs banding and pricing only — the UI shows the **band** and the
+  findings, not the numeric score. Severe / novel / low-confidence findings are
+  referred to a human. The LLM emits **severity only — never a free-form score or
+  a price**. Config lives in `config/severity_points.json`. Exact rules:
+  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#what-guards-what).
 - **Rate & price** — the approval gate (gate 2), one page. Per required section the
   deterministic premium row — `sum insured × base rate × (1 + band loading)`, no LLM —
   with the findings that set the band listed under it as identifier · rating ·
@@ -145,8 +149,9 @@ app/
   main.py          FastAPI routes;  report.py + templates/  HTML rendering
   pdf.py           insurer-facing PDF of an approved case (templates/case_pdf.html + xhtml2pdf)
   ingest_chats.py  seed memory (provisional) from historical chats;  evaluate.py  eval harness
-config/            rates.json (base rate per section) + loadings.json (band → loading %) —
-                   git-tracked, editable on /rates, placeholders until the broker's rate sheet
+config/            rates.json (base rate per section) + loadings.json (band → loading %) +
+                   severity_points.json (severity→points and band thresholds) — git-tracked;
+                   rates/loadings editable on /rates; severity_points hand-edited (validated at load)
 data/              cases.db  (git-ignored; safe to delete)
 sample_data/       example application, blank broker intake sheet (PDF + text), example
                    PDF output, synthetic historical chats

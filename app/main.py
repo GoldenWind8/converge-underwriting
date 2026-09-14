@@ -247,6 +247,7 @@ async def approve_draft(draft_id: str, request: Request) -> Response:
     approved.sort(key=lambda f: (section(f.section).number,
                                  -guardrails.SEVERITY_ORDER[f.severity]))
     draft, result = pending["draft"], pending["result"]
+    scored = guardrails.score_findings(approved)
     case = CaseRecord(
         case_id=memory.next_case_id(),
         created_at=_dt.datetime.now().isoformat(timespec="seconds"),
@@ -257,7 +258,9 @@ async def approve_draft(draft_id: str, request: Request) -> Response:
         draft_findings=result.findings,
         approved_findings=approved,
         corrections=pending["corrections"] + corrections,
-        final_band=guardrails.band_for_findings(approved),
+        final_band=scored.band,
+        risk_score=scored.risk_score,
+        score_explanation=scored.explanation,
         checked_by=checked_by,
         pricing=pricing.price_case(pending["needs"], approved, pending["sums"], overrides),
         provisional=form.get("add_to_memory") is None,

@@ -1,0 +1,21 @@
+{
+  "points": {
+    "low": 12.5,
+    "medium": 37.5,
+    "high": 62.5,
+    "severe": 87.5
+  },
+  "thresholds": {
+    "Low": [0.0, 25.0],
+    "Moderate": [25.0, 50.0],
+    "Elevated": [50.0, 75.0],
+    "High": [75.0, 100.0]
+  },
+  "notes": {
+    "low": "Midpoint of the Low band (0–25): a single low finding alone stays Low.",
+    "medium": "Midpoint of Moderate (25–50).",
+    "high": "Midpoint of Elevated (50–75).",
+    "severe": "Midpoint of High (75–100): one severe finding alone is High.",
+    "thresholds": "Bands use half-open intervals [lo, hi) except High which includes 100: [75, 100]."
+  }
+}

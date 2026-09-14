@@ -47,12 +47,12 @@ def test_pdf_leads_with_the_quote():
 
     priced = CASE.model_copy(update={"pricing": CasePricing(
         lines=[
-            PricedSection(section=SectionId.fire, band="Elevated", rate=0.40,
-                          table_loading=10, applied_loading=15,
+            PricedSection(section=SectionId.fire, band="Elevated", risk_score=62.5,
+                          rate=0.40, table_loading=10, applied_loading=15,
                           sum_insured=18_000_000, basis="Plant + stock",
                           base_premium=72_000, adjusted_premium=82_800),
-            PricedSection(section=SectionId.fidelity, band="Low", rate=0.50,
-                          table_loading=-10, applied_loading=-10),
+            PricedSection(section=SectionId.fidelity, band="Low", risk_score=12.5,
+                          rate=0.50, table_loading=-10, applied_loading=-10),
         ],
         base_total=72_000, adjusted_total=82_800,
     )})
@@ -66,6 +66,8 @@ def test_pdf_leads_with_the_quote():
     assert "band table" not in html, "the applied loading is the quoted loading; overrides are internal"
     assert "+15%" in html and "Elevated" in html
     assert "Fidelity" not in html and "Not priced" not in html, "unpriced lines stay off the PDF"
+    # Bands drive loadings; numeric scores stay off the client PDF.
+    assert "62.50" not in html and "pts" not in html
     assert "subject to the insurer" in html
 
 
