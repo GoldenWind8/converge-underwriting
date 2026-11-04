@@ -26,9 +26,9 @@
   .risk { margin-top: 14pt; padding-top: 10pt; border-top: 1px solid #dfe1e8; font-size: 9pt; color: #646875; letter-spacing: 1pt; text-transform: uppercase; }
   .risk .band { letter-spacing: 0; text-transform: none; font-size: 11pt; font-weight: bold; }
   .band-Low { color: #208567; } .band-Moderate { color: #b47913; } .band-Elevated { color: #c65b21; } .band-High { color: #b83c3c; }
-  .quote th { text-align: left; font-size: 8pt; font-weight: normal; color: #646875; text-transform: uppercase; letter-spacing: .5pt; padding: 0 0 6pt 0; border-bottom: 1px solid #dfe1e8; }
+  .quote th { text-align: left; font-size: 8pt; font-weight: normal; color: #646875; text-transform: uppercase; padding: 0 0 6pt 0; border-bottom: 1px solid #dfe1e8; }
   .quote td { padding: 8pt 0; border-bottom: 1px solid #eceef3; font-size: 10pt; }
-  .quote .r { text-align: right; }
+  .quote .r { padding-left: 8pt; text-align: right; }
   .quote .sub { font-size: 8pt; color: #646875; }
   .quote .total td { padding-top: 10pt; border-top: 1px solid #0f1120; border-bottom: 0; font-weight: bold; font-size: 11pt; }
   .closing { margin-top: 26pt; font-size: 8.5pt; color: #646875; line-height: 1.6; }
@@ -68,7 +68,7 @@
 <h2>Quote</h2>
 {% if priced %}
 <table class="quote">
-  <tr><th style="width:34%">Section</th><th class="r" style="width:18%">Sum insured</th><th class="r" style="width:12%">Rate</th><th class="r" style="width:16%">Loading</th><th class="r" style="width:20%">Annual premium</th></tr>
+  <tr><th style="width:32%">Section</th><th class="r" style="width:20%">Sum insured</th><th class="r" style="width:13%">Rate</th><th class="r" style="width:14%">Loading</th><th class="r" style="width:21%">Annual premium</th></tr>
   {% for line in priced %}
   <tr><td>{{ section(line.section).name }}{% if sub_types.get(line.section) %}<br /><span class="sub">{{ sub_types[line.section] }}</span>{% endif %}{% if line.basis %}<br /><span class="sub">{{ line.basis }}</span>{% endif %}</td><td class="r">{{ line.sum_insured|rand|replace(" ", "&nbsp;")|safe }}</td><td class="r">{{ "%g"|format(line.rate) }}%</td><td class="r">{{ "%+g"|format(line.applied_loading) }}%<br /><span class="sub">{{ line.band }}</span></td><td class="r">{{ line.adjusted_premium|rand|replace(" ", "&nbsp;")|safe }}</td></tr>
   {% endfor %}
