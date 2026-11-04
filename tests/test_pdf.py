@@ -71,6 +71,28 @@ def test_pdf_leads_with_the_quote():
     assert "subject to the insurer" in html
 
 
+def test_pdf_amounts_keep_digit_group_spaces():
+    import io
+
+    from pypdf import PdfReader
+
+    from app.models import CasePricing, PricedSection
+
+    priced = CASE.model_copy(update={"pricing": CasePricing(
+        lines=[PricedSection(section=SectionId.fire, band="Elevated", risk_score=62.5,
+                             rate=0.40, table_loading=10, applied_loading=15,
+                             sum_insured=24_700_000, basis="Plant + stock",
+                             base_premium=72_000, adjusted_premium=82_800)],
+        base_total=72_000, adjusted_total=82_800,
+    )})
+
+    page = PdfReader(io.BytesIO(case_pdf(priced, "2026-08-27 19:00"))).pages[0]
+    text = page.extract_text().replace("\xa0", " ")
+
+    assert "R 24 700 000" in text and "R 82 800" in text
+    assert "R24700000" not in text and "R82800" not in text
+
+
 def test_case_pdf_produces_a_pdf():
     data = case_pdf(CASE, "2026-08-27 19:00")
     assert data.startswith(b"%PDF")
